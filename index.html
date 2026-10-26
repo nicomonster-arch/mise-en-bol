@@ -690,20 +690,25 @@ var Engine = (function () {
     var out = [];
     RECIPES.forEach(function (r) {
       if (!!r.sans_robot !== !!sr) return;
-      var seen = {}, req = [];
-      r.ingredients.forEach(function (i) { if (i.u === "gout" || pan[i.id] || seen[i.id]) return; seen[i.id] = 1; req.push(i.id); });
-      var used = 0, miss = [], subs = [];
+      var seen = {}, req = [], qty = {}, ttl = norm(r.titre);
+      r.ingredients.forEach(function (i) { if (i.u === "gout" || pan[i.id]) return; if (!seen[i.id]) { seen[i.id] = 1; req.push(i.id); } qty[i.id] = (qty[i.id] || 0) + (i.u === "g" || i.u === "ml" ? i.q : i.u === "piece" || i.u === "tranche" ? i.q * 60 : 5); });
+      var used = 0, score = 0, miss = [], subs = [];
+      function weight(id) { // un ingrédient « star » (dans le titre ou en quantité) compte plus qu'une pointe de citron
+        var d = ING[id], names = d ? [d.nom, d.pluriel].filter(Boolean).map(norm) : [];
+        var inTitle = names.some(function (n) { return n.length > 2 && ttl.indexOf(n.split(" ")[0]) !== -1; });
+        return inTitle || qty[id] >= 80 ? 1 : qty[id] >= 25 ? 0.6 : 0.25;
+      }
       req.forEach(function (id) {
-        if (haveSet[id]) { used++; return; }
+        if (haveSet[id]) { used++; score += weight(id); return; }
         var sb = SUBS[id], found = null;
         if (sb) sb.options.forEach(function (o) { if (!found && haveSet[o.id] && (o.contextes.indexOf("*") !== -1 || o.contextes.indexOf(r.categorie) !== -1)) found = o; });
         if (found) subs.push({ de: id, par: found.id }); else miss.push(id);
       });
       if (!used) return;
       if (miss.length > (maxMissing == null ? 3 : maxMissing)) return;
-      out.push({ r: r, missing: miss, subs: subs, used: used, total: req.length });
+      out.push({ r: r, missing: miss, subs: subs, used: used, total: req.length, score: score });
     });
-    out.sort(function (a, b) { return (a.missing.length - b.missing.length) || (b.used - a.used) || (b.used / b.total - a.used / a.total) || a.r.titre.localeCompare(b.r.titre, "fr"); });
+    out.sort(function (a, b) { return (b.score - a.score) || (a.missing.length - b.missing.length) || (b.used / b.total - a.used / a.total) || a.r.titre.localeCompare(b.r.titre, "fr"); });
     return out;
   }
   function suggestIng(q, exclude) {
@@ -954,7 +959,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     var heads = ["Prêtes avec ce que tu as", "Il manque 1 ingrédient", "Il manque 2 ingrédients", "Il manque 3 ingrédients", "Il manque 4 ingrédients", "Il manque 5 ingrédients"], h = "", last = -1;
     res.slice(0, 60).forEach(function (x) {
       var m = x.missing.length;
-      if (m !== last) { h += (last >= 0 ? "</div>" : "") + '<h3 class="sec">' + heads[m] + '</h3><div class="grid">'; last = m; }
+      if (last < 0) { h += '<h3 class="sec">Les plus adaptées à ce que tu as</h3><div class="grid">'; last = 0; }
       var info = m ? '<div class="miss">À acheter : ' + esc(x.missing.map(ingName).join(", ")) + "</div>" : '<div class="miss ok">✓ Tout est là</div>';
       if (x.subs.length) info += '<div class="miss sub">↔ Remplacé : ' + esc(x.subs.map(function (z) { return ingName(z.de) + " par " + ingName(z.par); }).join(", ")) + "</div>";
       h += '<a class="card rc" href="#/r/' + encodeURIComponent(x.r.id) + '"><span class="rci">' + ico(x.r.leger ? "leger" : CATIC[x.r.categorie] || "plat", 22) + '</span><span class="rcb"><h3>' + esc(x.r.titre) + "</h3>" + info + '<div class="meta"><span>⏱ ' + E.fmtDurMin(x.r.temps.total_min) + "</span><span>" + x.used + "/" + x.total + " ingrédients</span></div></span></a>";
