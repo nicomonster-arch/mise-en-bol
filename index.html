@@ -708,7 +708,8 @@ var Engine = (function () {
       });
       if (!used) return;
       if (miss.length > (maxMissing == null ? 3 : maxMissing)) return;
-      out.push({ r: r, missing: miss, subs: subs, used: used, total: req.length, score: score });
+      var has = have.filter(function (h) { return famOf(h).some(function (x) { return seen[x]; }) || subs.some(function (z) { return z.par === h; }); });
+      out.push({ r: r, missing: miss, subs: subs, used: used, total: req.length, score: score, has: has });
     });
     out.sort(function (a, b) { return (b.score - a.score) || (a.missing.length - b.missing.length) || (b.used / b.total - a.used / a.total) || a.r.titre.localeCompare(b.r.titre, "fr"); });
     return out;
@@ -941,6 +942,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     $("#fclr").onclick = function () { S.fridge = []; persist(); updFridge(); };
     updFridge();
   }
+  var fShow = {};
   function addFridge(id) { if (S.fridge.indexOf(id) === -1) S.fridge.push(id); persist(); updFridge(); }
   function updFridge() {
     var pan = pantry();
@@ -963,15 +965,34 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     $("#fmax").querySelectorAll("[data-fm]").forEach(function (b) { b.onclick = function () { S.fMax = +b.dataset.fm; persist(); updFridge(); }; });
     var res = E.fridge(S.fridge, pan, S.fMax, frSR);
     if (!res.length) { el.innerHTML = '<div class="empty">Aucune recette avec ces ingrédients et ce nombre de manquants.<br>Ajoute d\'autres ingrédients ou augmente « Manquants max ».</div>'; return; }
-    var heads = ["Prêtes avec ce que tu as", "Il manque 1 ingrédient", "Il manque 2 ingrédients", "Il manque 3 ingrédients", "Il manque 4 ingrédients", "Il manque 5 ingrédients"], h = "", last = -1;
-    res.slice(0, 60).forEach(function (x) {
+    var nHave = S.fridge.length, groups = {}, order = [];
+    res.forEach(function (x) {
+      var k = x.has.slice().sort().join("|"); if (!groups[k]) { groups[k] = { has: x.has, list: [] }; order.push(k); }
+      groups[k].list.push(x);
+    });
+    order.sort(function (a, b) { return (groups[b].has.length - groups[a].has.length) || (groups[b].list.length - groups[a].list.length); });
+    var names = function (ids) { return ids.map(ingName).join(" + "); };
+    var cardOf = function (x) {
       var m = x.missing.length;
-      if (last < 0) { h += '<h3 class="sec">Les plus adaptées à ce que tu as</h3><div class="grid">'; last = 0; }
       var info = m ? '<div class="miss">À acheter : ' + esc(x.missing.map(ingName).join(", ")) + "</div>" : '<div class="miss ok">✓ Tout est là</div>';
       if (x.subs.length) info += '<div class="miss sub">↔ Remplacé : ' + esc(x.subs.map(function (z) { return ingName(z.de) + " par " + ingName(z.par); }).join(", ")) + "</div>";
-      h += '<a class="card rc" href="#/r/' + encodeURIComponent(x.r.id) + '"><span class="rci">' + ico(x.r.leger ? "leger" : CATIC[x.r.categorie] || "plat", 22) + '</span><span class="rcb"><h3>' + esc(x.r.titre) + "</h3>" + info + '<div class="meta"><span>⏱ ' + E.fmtDurMin(x.r.temps.total_min) + "</span><span>" + x.used + "/" + x.total + " ingrédients</span></div></span></a>";
+      return '<a class="card rc" href="#/r/' + encodeURIComponent(x.r.id) + '"><span class="rci">' + ico(x.r.leger ? "leger" : CATIC[x.r.categorie] || "plat", 22) + '</span><span class="rcb"><h3>' + esc(x.r.titre) + "</h3>" + info + '<div class="meta"><span>⏱ ' + E.fmtDurMin(x.r.temps.total_min) + "</span><span>" + x.used + "/" + x.total + " ingrédients</span></div></span></a>";
+    };
+    var h = "";
+    if (nHave > 1) {
+      var allG = groups[S.fridge.slice().sort().join("|")];
+      if (!allG) h += '<div class="warn info">Aucune recette ne combine <b>' + esc(names(S.fridge)) + "</b> (avec ce nombre de manquants). Voici ce qu'on peut faire avec une partie de tes ingrédients :</div>";
+    }
+    var none = S.fridge.filter(function (id) { return !res.some(function (x) { return x.has.indexOf(id) !== -1; }); });
+    if (none.length && nHave > 1) h += '<div class="warn info">Rien trouvé avec <b>' + esc(names(none)) + "</b> pour l'instant : essaie d'augmenter « Manquants max ».</div>";
+    order.forEach(function (k) {
+      var g = groups[k], shown = fShow[k] || 12, more = g.list.length - shown;
+      var title = g.has.length === nHave && nHave > 1 ? "✓ Avec tous tes ingrédients : " + names(g.has) : g.has.length > 1 ? "Avec " + names(g.has) : nHave > 1 ? "Seulement avec " + names(g.has) : "Les plus adaptées à ce que tu as";
+      h += '<h3 class="sec">' + esc(title) + ' <span class="muted" style="font-weight:400">(' + g.list.length + ")</span></h3><div class=\"grid\">" + g.list.slice(0, shown).map(cardOf).join("") + "</div>";
+      if (more > 0) h += '<div class="bar"><button class="btn sm" data-more="' + esc(k) + '">Voir ' + Math.min(more, 24) + " de plus</button></div>";
     });
-    el.innerHTML = h + "</div>";
+    el.innerHTML = h;
+    el.querySelectorAll("[data-more]").forEach(function (b) { b.onclick = function () { fShow[b.dataset.more] = (fShow[b.dataset.more] || 12) + 24; updFridge(); }; });
   }
   function pantryDialog() {
     var cand = ["sel", "poivre", "eau", "huile-olive", "huile-tournesol", "huile-colza", "beurre", "sucre", "farine-ble", "maizena", "levure-chimique", "bouillon-legumes", "bouillon-volaille", "bouillon-boeuf", "concentre-tomate", "thym", "laurier", "sauce-soja", "moutarde", "vinaigre-vin", "ail", "oignon", "pomme-de-terre", "oeuf", "lait-demi-ecreme", "cumin", "paprika", "curry", "muscade", "cannelle"].filter(function (id) { return E.getIng(id); });
