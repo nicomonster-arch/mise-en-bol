@@ -688,7 +688,7 @@ var Engine = (function () {
   function famOf(id) { for (var i = 0; i < FAM.length; i++) if (FAM[i].indexOf(id) !== -1) return FAM[i]; return [id]; }
   function fridge(have, pantry, maxMissing, sr) {
     var haveSet = {}; have.forEach(function (h) { famOf(h).forEach(function (x) { haveSet[x] = 1; }); });
-    var pan = {}; pantry.forEach(function (x) { pan[x] = 1; });
+    var pan = { eau: 1, sel: 1, poivre: 1 }; pantry.forEach(function (x) { pan[x] = 1; });
     var out = [];
     RECIPES.forEach(function (r) {
       if (!!r.sans_robot !== !!sr) return;
@@ -707,11 +707,12 @@ var Engine = (function () {
         if (found) subs.push({ de: id, par: found.id }); else miss.push(id);
       });
       if (!used) return;
-      if (miss.length > (maxMissing == null ? 3 : maxMissing)) return;
+      if (miss.length > (maxMissing == null ? 99 : maxMissing)) return;
+      if (score < 0.5) return; // simple pointe d'un ingrédient : ne compte pas
       var has = have.filter(function (h) { return famOf(h).some(function (x) { return seen[x]; }) || subs.some(function (z) { return z.par === h; }); });
       out.push({ r: r, missing: miss, subs: subs, used: used, total: req.length, score: score, has: has });
     });
-    out.sort(function (a, b) { return (b.score - a.score) || (a.missing.length - b.missing.length) || (b.used / b.total - a.used / a.total) || a.r.titre.localeCompare(b.r.titre, "fr"); });
+    out.sort(function (a, b) { return (a.missing.length - b.missing.length) || (b.score - a.score) || (b.used / b.total - a.used / a.total) || a.r.titre.localeCompare(b.r.titre, "fr"); });
     return out;
   }
   function suggestIng(q, exclude) {
@@ -779,7 +780,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     var d = null;
     try { d = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
     d = d || {};
-    return { fMax: d.fMax == null ? 3 : d.fMax, fridge: d.fridge || [], pantry: d.pantry || null, model: d.model || "TM6", saved: d.saved || [], theme: d.theme || "", style: d.styleChosen && d.style ? d.style : "sauge", styleChosen: !!d.styleChosen, wm: d.wm || "mixte" };
+    return { fm: d.fm == null ? 99 : d.fm, fridge: d.fridge || [], pantry: d.pantry || null, model: d.model || "TM6", saved: d.saved || [], theme: d.theme || "", style: d.styleChosen && d.style ? d.style : "sauge", styleChosen: !!d.styleChosen, wm: d.wm || "mixte" };
   }
   var mem = false;
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { mem = true; } }
@@ -961,10 +962,10 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       el.innerHTML = '<h3 class="sec">Les plus rapides</h3><div class="grid">' + all0.slice(0, 40).map(card).join("") + "</div>";
       return;
     }
-    $("#fmax").innerHTML = '<span class="muted" style="font-size:13px;align-self:center">Manquants max :</span>' + [0, 1, 2, 3, 5].map(function (n) { return '<button class="chip' + (S.fMax === n ? " on" : "") + '" data-fm="' + n + '">' + n + "</button>"; }).join("");
-    $("#fmax").querySelectorAll("[data-fm]").forEach(function (b) { b.onclick = function () { S.fMax = +b.dataset.fm; persist(); updFridge(); }; });
-    var res = E.fridge(S.fridge, pan, S.fMax, frSR);
-    if (!res.length) { el.innerHTML = '<div class="empty">Aucune recette avec ces ingrédients et ce nombre de manquants.<br>Ajoute d\'autres ingrédients ou augmente « Manquants max ».</div>'; return; }
+    $("#fmax").innerHTML = '<span class="muted" style="font-size:13px;align-self:center">Courses à prévoir, au plus :</span>' + [[0, "Aucune"], [2, "2"], [4, "4"], [99, "Peu importe"]].map(function (n) { return '<button class="chip' + (S.fm === n[0] ? " on" : "") + '" data-fm="' + n[0] + '">' + n[1] + "</button>"; }).join("");
+    $("#fmax").querySelectorAll("[data-fm]").forEach(function (b) { b.onclick = function () { S.fm = +b.dataset.fm; persist(); updFridge(); }; });
+    var res = E.fridge(S.fridge, pan, S.fm, frSR);
+    if (!res.length) { el.innerHTML = '<div class="empty">Aucune recette avec ces ingrédients et ce nombre de courses.<br>Choisis « Peu importe » ou ajoute d\'autres ingrédients.</div>'; return; }
     var nHave = S.fridge.length, groups = {}, order = [];
     res.forEach(function (x) {
       var k = x.has.slice().sort().join("|"); if (!groups[k]) { groups[k] = { has: x.has, list: [] }; order.push(k); }
@@ -980,13 +981,13 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       if (x.subs.length) info += '<div class="miss sub">↔ Remplacé : ' + esc(x.subs.map(function (z) { return ingName(z.de) + " par " + ingName(z.par); }).join(", ")) + "</div>";
       return '<a class="card rc" href="#/r/' + encodeURIComponent(x.r.id) + '"><span class="rci">' + ico(x.r.leger ? "leger" : CATIC[x.r.categorie] || "plat", 22) + '</span><span class="rcb"><h3>' + esc(x.r.titre) + "</h3>" + info + '<div class="meta"><span>⏱ ' + E.fmtDurMin(x.r.temps.total_min) + "</span><span>" + x.used + "/" + x.total + " ingrédients</span></div></span></a>";
     };
-    var h = "";
+    var h = '<p class="muted" style="font-size:13px;margin:12px 0 0">Les recettes qui utilisent ce que tu as, de la plus simple (rien à acheter) à celle qui demande le plus de courses.</p>';
     if (nHave > 1) {
       var allG = groups[S.fridge.slice().sort().join("|")];
-      if (!allG) h += '<div class="warn info">Aucune recette ne combine <b>' + esc(names(S.fridge)) + "</b> (avec ce nombre de manquants). Voici ce qu'on peut faire avec une partie de tes ingrédients :</div>";
+      if (!allG) h += '<div class="warn info">Aucune recette ne combine <b>' + esc(names(S.fridge)) + "</b> (avec ce nombre de courses). Voici ce qu'on peut faire avec une partie de tes ingrédients :</div>";
     }
     var none = S.fridge.filter(function (id) { return !res.some(function (x) { return x.has.indexOf(id) !== -1; }); });
-    if (none.length && nHave > 1) h += '<div class="warn info">Rien trouvé avec <b>' + esc(names(none)) + "</b> pour l'instant : essaie d'augmenter « Manquants max ».</div>";
+    if (none.length && nHave > 1) h += '<div class="warn info">Rien trouvé avec <b>' + esc(names(none)) + "</b> pour l'instant : choisis « Peu importe » dans « Courses à prévoir ».</div>";
     order.forEach(function (k) {
       var g = groups[k], shown = fShow[k] || 12, more = g.list.length - shown;
       var title = g.has.length === nHave && nHave > 1 ? "✓ Avec tous tes ingrédients : " + names(g.has) : g.has.length > 1 ? "Avec " + names(g.has) : nHave > 1 ? "Seulement avec " + names(g.has) : "Les plus adaptées à ce que tu as";
