@@ -1281,7 +1281,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       '<h3 class="sec">À propos</h3><p class="muted">Les recettes sont écrites pour cette application et n\'ont pas toutes été testées sur une machine : le signalement « non testée » disparaîtra au fil des essais. Thermomix® est une marque de Vorwerk ; cette application n\'est pas affiliée.</p>');
     document.querySelectorAll("[data-style]").forEach(function (b) { b.onclick = function () { S.style = b.dataset.style; S.styleChosen = true; persist(); applyTheme(); viewSettings(); }; });
     document.querySelectorAll("[data-wm]").forEach(function (b) { b.onclick = function () { S.wm = b.dataset.wm; persist(); applyTheme(); viewSettings(); }; });
-    $("#th").onchange = function (e) { S.theme = e.target.value; persist(); applyTheme(); viewSettings(); };
+    $("#th").onchange = function (e) { S.theme = e.target.value; persist(); applyTheme(); var tb = $("#theme"); if (tb) tb.textContent = isDark() ? "☀︎" : "☾"; };
     $("#m").onchange = function (e) { S.model = e.target.value; persist(); toast("Modèle enregistré"); };
     $("#exp").onclick = function () {
       var b = new Blob([JSON.stringify({ app: "mise-en-bol", v: 1, saved: S.saved, model: S.model }, null, 1)], { type: "application/json" });
