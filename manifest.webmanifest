@@ -1,0 +1,17 @@
+{
+ "name": "Mise en bol",
+ "short_name": "Mise en bol",
+ "start_url": "./",
+ "display": "standalone",
+ "background_color": "#faf6ef",
+ "theme_color": "#c4551b",
+ "lang": "fr",
+ "icons": [
+  {
+   "src": "icon.svg",
+   "sizes": "any",
+   "type": "image/svg+xml",
+   "purpose": "any maskable"
+  }
+ ]
+}
