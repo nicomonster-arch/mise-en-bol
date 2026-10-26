@@ -1122,7 +1122,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       (lighter.length ? '<div class="warn info" style="border-left-color:var(--leaf)">🌿 Version allégée : ' + lighter.map(function (l) { return '<a href="#/r/' + l.id + '">' + esc(l.titre) + "</a>"; }).join(", ") + "</div>" : "") +
       '<div class="meta" style="margin:6px 0">' + tags.join("") + "</div>" +
       '<div class="bar"><div class="stepper"><button id="pm" aria-label="moins">−</button><span>' + cur.portions + " portion" + (cur.portions > 1 ? "s" : "") + '</span><button id="pp" aria-label="plus">+</button></div>' +
-      (r.sans_robot ? "" : '<select id="model" aria-label="Modèle">' + Object.keys(E.MODELS).map(function (m) { return '<option value="' + m + '"' + (m === S.model ? " selected" : "") + ">Thermomix " + m + "</option>"; }).join("") + "</select>") + "</div>";
+      (r.sans_robot ? "" : '<div class="chips" id="model">' + Object.keys(E.MODELS).map(function (m) { return '<button class="chip' + (m === S.model ? " on" : "") + '" data-rm="' + m + '">' + m + "</button>"; }).join("") + "</div>") + "</div>";
     if (cur.portions < base.portions_min || cur.portions > base.portions_max) h += '<div class="warn info">Cette recette est prévue pour ' + base.portions_min + " à " + base.portions_max + " portions : au-delà, les résultats sont moins sûrs.</div>";
     sc.warnings.forEach(function (w) { h += '<div class="warn ' + w.level + '">' + (w.level === "stop" ? "⛔ " : "ℹ️ ") + esc(w.text) + "</div>"; });
     if (cur.shared) h += '<div class="twist"><b>💬 Recette partagée' + (cur.shared.f ? " par " + esc(cur.shared.f) : "") + "</b>" + (cur.shared.c ? "<p>" + esc(cur.shared.c).replace(/\n/g, "<br>") + "</p>" : "") + '<p class="muted" style="font-size:13px">Touche « Enregistrer » pour la garder dans tes recettes.</p></div>';
@@ -1161,7 +1161,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
 
     $("#pm").onclick = function () { cur.portions = Math.max(1, cur.portions - (cur.portions > 12 ? 2 : 1)); viewRecipe(); };
     $("#pp").onclick = function () { cur.portions = Math.min(40, cur.portions + (cur.portions >= 12 ? 2 : 1)); viewRecipe(); };
-    if ($("#model")) $("#model").onchange = function (e) { S.model = e.target.value; persist(); viewRecipe(); };
+    document.querySelectorAll("[data-rm]").forEach(function (b) { b.onclick = function () { S.model = b.dataset.rm; persist(); viewRecipe(); }; });
     document.querySelectorAll("[data-sub]").forEach(function (b) { b.onclick = function () { subDialog(+b.dataset.sub); }; });
     if (ed) {
       $("#applyEd").onclick = applyEdit;
