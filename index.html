@@ -794,6 +794,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     var h = H.replace(/^#\/?/, ""), p = h.split("/");
     if (p[0] === "r" && p[1]) openRecipe(decodeURIComponent(p[1]));
     else if (p[0] === "s" && p[1]) openSaved(p[1]);
+    else if (p[0] === "p" && p[1]) openShared(p[1]);
     else if (p[0] === "mes") viewSaved();
     else if (p[0] === "frigo") viewFridge();
     else if (p[0] === "sansrobot") viewFridge(true);
@@ -982,6 +983,57 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     cur = { base: E.clone(r), portions: r.portions, sid: null, editing: false, orig: id };
     viewRecipe();
   }
+  /* ---------- partage par lien ---------- */
+  function b64u(bytes) { var s = "", i; for (i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+  function unb64u(t) { t = t.replace(/-/g, "+").replace(/_/g, "/"); while (t.length % 4) t += "="; var b = atob(t), a = new Uint8Array(b.length), i; for (i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
+  function pipe(bytes, Stream) {
+    var st = new Stream("deflate-raw"), w = st.writable.getWriter(); w.write(bytes); w.close();
+    return new Response(st.readable).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+  }
+  function encodePayload(o) {
+    var bytes = new TextEncoder().encode(JSON.stringify(o));
+    if (typeof CompressionStream === "undefined") return Promise.resolve("j" + b64u(bytes));
+    return pipe(bytes, CompressionStream).then(function (z) { return "z" + b64u(z); }, function () { return "j" + b64u(bytes); });
+  }
+  function decodePayload(t) {
+    var kind = t.charAt(0), bytes = unb64u(t.slice(1));
+    var done = function (u) { return JSON.parse(new TextDecoder().decode(u)); };
+    if (kind === "j") return Promise.resolve(done(bytes));
+    if (typeof DecompressionStream === "undefined") return Promise.reject(new Error("no"));
+    return pipe(bytes, DecompressionStream).then(done);
+  }
+  function shareDialog() {
+    var d = dlg('<h3>Partager cette recette</h3><label>Ton prénom (facultatif)<br><input class="search" id="shf" style="font-size:16px;padding:10px" maxlength="40"></label>' +
+      '<label style="display:block;margin-top:10px">Ton commentaire pour la personne<br><textarea id="shc" maxlength="600" placeholder="Ex. : j\'ai mis 20 g de sucre en moins et ça passe très bien !"></textarea></label>' +
+      '<div class="row"><button class="btn pri" id="shg">Créer le lien</button><button class="btn" id="x">Fermer</button></div><div id="shr"></div>');
+    d.querySelector("#x").onclick = function () { d.close(); };
+    d.querySelector("#shg").onclick = function () {
+      var r = E.clone(cur.shown), orig = E.getRecipe(cur.orig), same = orig && !cur.sid && !(r.modifs && r.modifs.length) && !r.notes;
+      var o = { v: 1, f: d.querySelector("#shf").value.trim(), c: d.querySelector("#shc").value.trim() };
+      if (same) { o.id = cur.orig; o.p = cur.shown.portions; } else { delete r.shown; o.r = r; }
+      encodePayload(o).then(function (t) {
+        var url = location.href.split("#")[0] + "#/p/" + t;
+        d.querySelector("#shr").innerHTML = '<p class="muted" style="font-size:13px;margin:10px 0 4px">Envoie ce lien (message, mail…). La personne verra la recette avec ton commentaire.</p><textarea id="shu" readonly rows="3" style="min-height:0"></textarea><div class="row"><button class="btn pri" id="cp">Copier le lien</button>' + (navigator.share ? '<button class="btn" id="sn">Envoyer…</button>' : "") + "</div>";
+        var ta = d.querySelector("#shu"); ta.value = url;
+        d.querySelector("#cp").onclick = function () {
+          var ok = function () { toast("Lien copié"); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, function () { ta.select(); try { document.execCommand("copy"); ok(); } catch (e) {} });
+          else { ta.select(); try { document.execCommand("copy"); ok(); } catch (e) {} }
+        };
+        var sn = d.querySelector("#sn"); if (sn) sn.onclick = function () { navigator.share({ title: r.titre, text: o.c || r.titre, url: url }).catch(function () {}); };
+      });
+    };
+  }
+  function openShared(t) {
+    decodePayload(t).then(function (o) {
+      var r = o.id ? E.getRecipe(o.id) : o.r;
+      if (!r || !Array.isArray(r.ingredients) || !Array.isArray(r.etapes) || !r.titre) throw new Error("bad");
+      var base = E.clone(r);
+      cur = { base: base, portions: o.p || base.portions || 4, sid: null, editing: false, orig: o.id || base.id, shared: { c: String(o.c || "").slice(0, 600), f: String(o.f || "").slice(0, 40) } };
+      viewRecipe();
+    }).catch(function () { shell('<div class="empty">Ce lien de recette n\'est pas lisible (il a peut-être été coupé).<br><a href="#/">Retour à l\'accueil</a></div>'); });
+  }
+
   function openSaved(sid) {
     var s = S.saved.filter(function (x) { return x.sid === sid; })[0];
     if (!s) return viewSaved();
@@ -1015,6 +1067,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       (r.sans_robot ? "" : '<select id="model" aria-label="Modèle">' + Object.keys(E.MODELS).map(function (m) { return '<option value="' + m + '"' + (m === S.model ? " selected" : "") + ">Thermomix " + m + "</option>"; }).join("") + "</select>") + "</div>";
     if (cur.portions < base.portions_min || cur.portions > base.portions_max) h += '<div class="warn info">Cette recette est prévue pour ' + base.portions_min + " à " + base.portions_max + " portions : au-delà, les résultats sont moins sûrs.</div>";
     sc.warnings.forEach(function (w) { h += '<div class="warn ' + w.level + '">' + (w.level === "stop" ? "⛔ " : "ℹ️ ") + esc(w.text) + "</div>"; });
+    if (cur.shared) h += '<div class="twist"><b>💬 Recette partagée' + (cur.shared.f ? " par " + esc(cur.shared.f) : "") + "</b>" + (cur.shared.c ? "<p>" + esc(cur.shared.c).replace(/\n/g, "<br>") + "</p>" : "") + '<p class="muted" style="font-size:13px">Touche « Enregistrer » pour la garder dans tes recettes.</p></div>';
     if (r.verifier) h += '<div class="warn info">🧪 Recette non testée sur une vraie machine : vérifie les temps et la texture au premier essai.</div>';
     if (r.modifs && r.modifs.length) h += '<div class="modifs"><b>Modifications :</b><ul>' + r.modifs.map(function (m) { return "<li>" + esc(m) + "</li>"; }).join("") + "</ul></div>";
 
@@ -1025,7 +1078,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       var p = E.ingParts(r, i), sub = E.subsFor(r, i.id);
       var q = ed && i.q != null ? '<input class="qty" data-k="' + k + '" type="number" step="any" min="0" value="' + i.q + '"> ' + (i.u === "g" || i.u === "ml" ? i.u : "") : esc(p.q);
       return '<li><span class="q">' + q + '</span><span class="n">' + esc(p.nom) + (i.remplace ? ' <span class="rep">(remplace ' + esc((E.getIng(i.remplace) || { nom: i.remplace }).nom) + ")</span>" : "") + "</span>" +
-        (!ed && sub && (sub.options.length || sub.sans) ? '<button class="btn sm ghost" data-sub="' + k + '" title="Remplacer ou retirer">⇄</button>' : "") + "</li>";
+        (!ed && sub && (sub.options.length || (sub.sans && sub.sans.possible)) ? '<button class="btn sm ghost" data-sub="' + k + '" title="Remplacer ou retirer">⇄</button>' : "") + "</li>";
     }).join("") + "</ul>";
 
     h += '<h3 class="sec">Étapes</h3><ol class="steps">' + r.etapes.map(function (e, n) {
@@ -1044,7 +1097,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
 
     h += '<div class="bar" style="position:sticky;bottom:0;background:var(--bg);padding:10px 0;border-top:1px solid var(--line);margin-top:20px">' +
       (ed ? '<button class="btn pri" id="applyEd">Valider mes modifications</button><button class="btn" id="cancelEd">Annuler</button>'
-        : '<button class="btn pri" id="gocook">▶ Cuisiner</button><button class="btn" id="save">' + (cur.sid ? "Enregistrer…" : "💾 Enregistrer") + '</button><button class="btn" id="edit">✎ Ce que j\'ai fait</button>') + "</div>";
+        : '<button class="btn pri" id="gocook">▶ Cuisiner</button><button class="btn" id="save">' + (cur.sid ? "Enregistrer…" : "💾 Enregistrer") + '</button><button class="btn" id="edit">✎ Ce que j\'ai fait</button><button class="btn" id="share">↗ Partager</button>') + "</div>";
     shell(h);
     cur.shown = r;
 
@@ -1058,6 +1111,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     } else {
       $("#gocook").onclick = function () { startCook(cur.shown); };
       $("#save").onclick = saveDialog;
+      $("#share").onclick = shareDialog;
       $("#edit").onclick = function () { cur.base = E.clone(cur.shown); cur.portions = cur.shown.portions; cur.editing = true; viewRecipe(); };
     }
   }
@@ -1097,8 +1151,8 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
         return '<div class="opt"><b>' + esc(o.nom) + (o.par_unite ? "" : o.ratio !== 1 ? " (× " + String(o.ratio).replace(".", ",") + ")" : "") + "</b><small>" + esc(o.effet) + "</small><small><i>" + esc(o.ajustement) + '</i></small><div class="row" style="margin-top:6px"><button class="btn sm pri" data-o="' + n + '">Utiliser</button></div></div>';
       }).join("");
     } else h += '<p class="muted">Pas de remplacement proposé pour cet ingrédient.</p>';
-    h += '<div class="row">' + (s && s.sans ? '<button class="btn danger" id="rm">Retirer sans remplacer</button>' : "") + '<button class="btn" id="x">Fermer</button></div>';
-    if (s && s.sans) h += '<p class="muted" style="font-size:13px">' + esc(s.sans) + "</p>";
+    h += '<div class="row">' + (s && s.sans && s.sans.possible ? '<button class="btn danger" id="rm">Retirer sans remplacer</button>' : "") + '<button class="btn" id="x">Fermer</button></div>';
+    if (s && s.sans && s.sans.effet) h += '<p class="muted" style="font-size:13px">' + esc(s.sans.effet) + "</p>";
     var d = dlg(h);
     d.querySelectorAll("[data-o]").forEach(function (b) {
       b.onclick = function () {
