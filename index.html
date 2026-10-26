@@ -894,15 +894,26 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   function ingName(id) { return (E.getIng(id) || { nom: id }).nom; }
   function viewFridge() {
     shell('<a href="#/" class="muted" style="text-decoration:none">← Retour</a><h2>Dans mon frigo</h2><p class="muted" style="margin:0 0 10px">Ajoute ce que tu as sous la main. Je te propose les recettes qui demandent le moins de courses.</p>' +
-      '<input class="search" id="fq" type="search" placeholder="Ajoute un ingrédient : poireau, lardons, crème…" autocomplete="off"><div id="fsug" class="chips"></div>' +
+      '<input class="search" id="fq" type="search" placeholder="Ex. : chou, carotte, viande hachée" autocomplete="off" enterkeyhint="done"><div class="bar" style="margin:6px 0"><button class="btn pri sm" id="fok">Ajouter</button><span class="muted" style="font-size:13px">Tape un ou plusieurs ingrédients séparés par une virgule, puis « Ajouter » ou Entrée. Les recettes apparaissent en dessous.</span></div><div id="fsug" class="chips"></div>' +
       '<div id="fhave"></div><details id="fdet" class="fdet"><summary>Parcourir par catégorie</summary><div class="chips" id="ftabs"></div><div class="chips" id="fpick"></div></details>' +
       '<div class="chips" id="fmax"></div><div class="bar"><button class="btn sm" id="fpan">Mes basiques</button><button class="btn sm danger" id="fclr">Tout vider</button></div><div id="fres"></div>');
     var q = $("#fq");
-    q.addEventListener("input", function () {
-      var ids = E.suggestIng(q.value, S.fridge.concat(pantry()));
+    function seg() { var p = q.value.split(/[,;]/); return p[p.length - 1].trim(); }
+    function bestAdd(t) { var ids = E.suggestIng(t, S.fridge.concat(pantry())); if (ids.length) addFridge(ids[0]); return ids.length; }
+    function sug() {
+      var ids = E.suggestIng(seg(), S.fridge.concat(pantry()));
       $("#fsug").innerHTML = ids.map(function (id) { return '<button class="chip add" data-add="' + id + '">+ ' + esc(ingName(id)) + "</button>"; }).join("");
-      $("#fsug").querySelectorAll("[data-add]").forEach(function (b) { b.onclick = function () { addFridge(b.dataset.add); q.value = ""; $("#fsug").innerHTML = ""; q.focus(); }; });
-    });
+      $("#fsug").querySelectorAll("[data-add]").forEach(function (b) { b.onclick = function () { addFridge(b.dataset.add); var p = q.value.split(/[,;]/); p.pop(); q.value = p.length ? p.join(", ") + (p.length ? ", " : "") : ""; sug(); q.focus(); }; });
+    }
+    function commit() { // ajoute le meilleur choix pour chaque mot séparé par une virgule
+      var parts = q.value.split(/[,;]/).map(function (x) { return x.trim(); }).filter(Boolean), miss = [];
+      parts.forEach(function (t) { if (!bestAdd(t)) miss.push(t); });
+      q.value = miss.join(", "); sug();
+      if (miss.length) toast("Je ne connais pas : " + miss.join(", "));
+    }
+    q.addEventListener("input", function () { if (/[,;]\s*$/.test(q.value)) { commit(); return; } sug(); });
+    q.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); commit(); } });
+    $("#fok").onclick = commit;
     $("#fpan").onclick = pantryDialog;
     $("#fclr").onclick = function () { S.fridge = []; persist(); updFridge(); };
     updFridge();
