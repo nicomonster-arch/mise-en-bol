@@ -1074,21 +1074,40 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     var go1 = function (rows) {
       var x = rows.filter(function (y) { return y.id === id; })[0];
       if (!x) return shell('<div class="empty">Cette recette n\'existe plus.<br><a href="#/communaute">Retour</a></div>');
-      openSharedObj(Object.assign({}, x.payload, { f: x.author || x.payload.f, c: x.comment || x.payload.c }));
+      openSharedObj(Object.assign({}, x.payload, { f: x.author || x.payload.f, c: x.comment || x.payload.c }), x.id);
     };
     if (commCache.length) go1(commCache);
     else if (!COMM) go1([]);
     else sbFetch("shared_recipes?select=id,created_at,author,comment,payload&id=eq." + encodeURIComponent(id)).then(go1).catch(function () { shell('<div class="empty">Chargement impossible.<br><a href="#/communaute">Retour</a></div>'); });
   }
+  function initComments(id) {
+    var list = function () {
+      sbFetch("recipe_comments?select=created_at,author,body&recipe_id=eq." + encodeURIComponent(id) + "&order=created_at.asc&limit=200").then(function (rows) {
+        var el = $("#cml"); if (!el) return;
+        el.innerHTML = rows.length ? rows.map(function (c) { return '<p style="margin:8px 0"><b>' + esc(c.author || "Quelqu'un") + '</b> <span class="muted" style="font-size:12px">' + new Date(c.created_at).toLocaleDateString("fr-FR") + "</span><br>" + esc(c.body).replace(/\n/g, "<br>") + "</p>"; }).join("") : '<p class="muted" style="font-size:13px">Pas encore de commentaire.</p>';
+      }).catch(function () { var el = $("#cml"); if (el) el.innerHTML = '<p class="muted" style="font-size:13px">Commentaires indisponibles pour l\'instant.</p>'; });
+    };
+    var nm = ""; try { nm = localStorage.getItem("meb.name") || ""; } catch (e) {}
+    $("#cmf").value = nm;
+    $("#cmb").onclick = function () {
+      var t = $("#cmt").value.trim(), f = $("#cmf").value.trim(); if (!t) { toast("Écris un commentaire"); return; }
+      var btn = $("#cmb"); btn.disabled = true;
+      sbFetch("recipe_comments", { method: "POST", body: JSON.stringify({ recipe_id: id, author: f.slice(0, 40), body: t.slice(0, 600) }) }).then(function () {
+        try { localStorage.setItem("meb.name", f); } catch (e) {}
+        $("#cmt").value = ""; btn.disabled = false; toast("Commentaire ajouté"); list();
+      }).catch(function () { btn.disabled = false; toast("Échec de l'envoi"); });
+    };
+    list();
+  }
   function openShared(t) {
     decodePayload(t).then(openSharedObj).catch(function () { shell('<div class="empty">Ce lien de recette n\'est pas lisible (il a peut-être été coupé).<br><a href="#/">Retour à l\'accueil</a></div>'); });
   }
-  function openSharedObj(o) {
+  function openSharedObj(o, commId) {
     try {
       var r = o.id ? E.getRecipe(o.id) : o.r;
       if (!r || !Array.isArray(r.ingredients) || !Array.isArray(r.etapes) || !r.titre) throw new Error("bad");
       var base = E.clone(r);
-      cur = { base: base, portions: o.p || base.portions || 4, sid: null, editing: false, orig: o.id || base.id, shared: { c: String(o.c || "").slice(0, 600), f: String(o.f || "").slice(0, 40) } };
+      cur = { base: base, portions: o.p || base.portions || 4, sid: null, editing: false, orig: o.id || base.id, shared: { c: String(o.c || "").slice(0, 600), f: String(o.f || "").slice(0, 40) }, commId: commId || null };
       viewRecipe();
     } catch (e) { shell('<div class="empty">Cette recette n\'est pas lisible.<br><a href="#/">Retour à l\'accueil</a></div>'); }
   }
@@ -1127,6 +1146,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     if (cur.portions < base.portions_min || cur.portions > base.portions_max) h += '<div class="warn info">Cette recette est prévue pour ' + base.portions_min + " à " + base.portions_max + " portions : au-delà, les résultats sont moins sûrs.</div>";
     sc.warnings.forEach(function (w) { h += '<div class="warn ' + w.level + '">' + (w.level === "stop" ? "⛔ " : "ℹ️ ") + esc(w.text) + "</div>"; });
     if (cur.shared) h += '<div class="twist"><b>💬 Recette partagée' + (cur.shared.f ? " par " + esc(cur.shared.f) : "") + "</b>" + (cur.shared.c ? "<p>" + esc(cur.shared.c).replace(/\n/g, "<br>") + "</p>" : "") + '<p class="muted" style="font-size:13px">Touche « Enregistrer » pour la garder dans tes recettes.</p></div>';
+    if (cur.shared && cur.commId && COMM) h += '<div id="cmts" class="twist"><b>💬 Commentaires</b><div id="cml"><p class="muted" style="font-size:13px">Chargement…</p></div><label style="display:block;margin-top:10px">Ton prénom (facultatif)<br><input class="search" id="cmf" style="font-size:16px;padding:10px" maxlength="40"></label><label style="display:block;margin-top:8px">Ton commentaire<br><textarea id="cmt" maxlength="600" placeholder="Ex. : fait hier, j\'ai ajouté un peu de citron, délicieux !"></textarea></label><div class="row"><button class="btn pri" id="cmb">Ajouter mon commentaire</button></div></div>';
     if (r.verifier) h += '<div class="warn info">🧪 Recette non testée sur une vraie machine : vérifie les temps et la texture au premier essai.</div>';
     if (r.modifs && r.modifs.length) h += '<div class="modifs"><b>Modifications :</b><ul>' + r.modifs.map(function (m) { return "<li>" + esc(m) + "</li>"; }).join("") + "</ul></div>";
 
@@ -1163,6 +1183,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     $("#pm").onclick = function () { cur.portions = Math.max(1, cur.portions - (cur.portions > 12 ? 2 : 1)); viewRecipe(); };
     $("#pp").onclick = function () { cur.portions = Math.min(40, cur.portions + (cur.portions >= 12 ? 2 : 1)); viewRecipe(); };
     document.querySelectorAll("[data-rm]").forEach(function (b) { b.onclick = function () { S.model = b.dataset.rm; persist(); viewRecipe(); }; });
+    if ($("#cmts")) initComments(cur.commId);
     document.querySelectorAll("[data-sub]").forEach(function (b) { b.onclick = function () { subDialog(+b.dataset.sub); }; });
     if (ed) {
       $("#applyEd").onclick = applyEdit;
