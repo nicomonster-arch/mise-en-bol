@@ -717,6 +717,11 @@ var Engine = (function () {
     return out.slice(0, 8).map(function (x) { return x[2]; });
   }
 
+  function matchIng(q, exclude) { // id seulement si la saisie est exacte, ou s'il n'y a qu'un seul candidat
+    var n = norm(q), ids = suggestIng(q, exclude);
+    for (var k = 0; k < ids.length; k++) { var d = ING[ids[k]]; if ([d.nom, d.pluriel].concat(d.alias).map(norm).indexOf(n) !== -1) return ids[k]; }
+    return ids.length === 1 ? ids[0] : null;
+  }
   function stats() {
     var cats = {}, cui = {}; RECIPES.forEach(function (r) { cats[r.categorie] = (cats[r.categorie] || 0) + 1; cui[r.cuisine || "francaise"] = (cui[r.cuisine || "francaise"] || 0) + 1; });
     return { cuisines: cui, total: RECIPES.length, leger: RECIPES.filter(function (r) { return r.leger; }).length, cats: cats };
@@ -724,7 +729,7 @@ var Engine = (function () {
 
   var api = {
     init: init, norm: norm, search: search, regimesOf: regimesOf, getRecipe: getRecipe, lighterOf: lighterOf,
-    scale: scale, bowlProfile: bowlProfile, varomaNeed: varomaNeed, subsFor: subsFor, recetteDuJour: recetteDuJour, seasonScore: seasonScore, fridge: fridge, suggestIng: suggestIng, PANTRY: PANTRY_DEFAUT, applySub: applySub, setQty: setQty, pushModif: pushModif, removeIngredient: removeIngredient,
+    scale: scale, bowlProfile: bowlProfile, varomaNeed: varomaNeed, subsFor: subsFor, recetteDuJour: recetteDuJour, seasonScore: seasonScore, fridge: fridge, suggestIng: suggestIng, matchIng: matchIng, PANTRY: PANTRY_DEFAUT, applySub: applySub, setQty: setQty, pushModif: pushModif, removeIngredient: removeIngredient,
     ingParts: ingParts, ingDef: ingDef, fmtNum: fmtNum, fmtDur: fmtDur, fmtDurMin: fmtDurMin, fmtSpeed: fmtSpeed, fmtTemp: fmtTemp,
     roundQty: roundQty, clone: clone, stats: stats, adaptModel: adaptModel,
     CATS: CATS, CUISINES: CUISINES, REGS: REGS, MODELS: MODELS, getIng: function (id) { return ING[id] || null; }, allIng: function () { return ING; }, all: function () { return RECIPES; }
@@ -899,7 +904,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       '<div class="chips" id="fmax"></div><div class="bar"><button class="btn sm" id="fpan">Mes basiques</button><button class="btn sm danger" id="fclr">Tout vider</button></div><div id="fres"></div>');
     var q = $("#fq");
     function seg() { var p = q.value.split(/[,;]/); return p[p.length - 1].trim(); }
-    function bestAdd(t) { var ids = E.suggestIng(t, S.fridge.concat(pantry())); if (ids.length) addFridge(ids[0]); return ids.length; }
+    function bestAdd(t) { var id = E.matchIng(t, S.fridge.concat(pantry())); if (id) addFridge(id); return !!id; }
     function sug() {
       var ids = E.suggestIng(seg(), S.fridge.concat(pantry()));
       $("#fsug").innerHTML = ids.map(function (id) { return '<button class="chip add" data-add="' + id + '">+ ' + esc(ingName(id)) + "</button>"; }).join("");
@@ -909,7 +914,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       var parts = q.value.split(/[,;]/).map(function (x) { return x.trim(); }).filter(Boolean), miss = [];
       parts.forEach(function (t) { if (!bestAdd(t)) miss.push(t); });
       q.value = miss.join(", "); sug();
-      if (miss.length) toast("Je ne connais pas : " + miss.join(", "));
+      if (miss.length) toast("Choisis dans la liste : " + miss.join(", "));
     }
     q.addEventListener("input", function () { if (/[,;]\s*$/.test(q.value)) { commit(); return; } sug(); });
     q.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); commit(); } });
