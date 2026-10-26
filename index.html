@@ -1066,8 +1066,16 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       $("#cl").innerHTML = rows.length ? '<div class="grid">' + rows.map(function (x) {
         var r = x.payload && (x.payload.r || E.getRecipe(x.payload.id));
         if (!r || !r.titre) return "";
-        return '<div class="card"><a href="#/c/' + esc(x.id) + '" style="text-decoration:none;color:inherit"><h3>' + esc(r.titre) + "</h3><p>" + (x.author ? "par " + esc(x.author) + " · " : "") + new Date(x.created_at).toLocaleDateString("fr-FR") + "</p>" + (x.comment ? '<p class="muted" style="font-size:13px">« ' + esc(String(x.comment).slice(0, 140)) + " »</p>" : "") + "</a></div>";
+        return '<div class="card" data-rid="' + esc(x.id) + '"><a href="#/c/' + esc(x.id) + '" style="text-decoration:none;color:inherit"><h3>' + esc(r.titre) + "</h3><p>" + (x.author ? "par " + esc(x.author) + " · " : "") + new Date(x.created_at).toLocaleDateString("fr-FR") + "</p>" + (x.comment ? '<p class="muted" style="font-size:13px">« ' + esc(String(x.comment).slice(0, 140)) + " »</p>" : "") + '</a><div class="cprev"></div></div>';
       }).join("") + "</div>" : '<div class="empty">Aucune recette partagée pour l\'instant.<br>Sois le premier : ouvre une recette puis « Partager ».</div>';
+      if (!rows.length) return;
+      sbFetch("recipe_comments?select=recipe_id,author,body,created_at&recipe_id=in.(" + rows.map(function (x) { return x.id; }).join(",") + ")&order=created_at.desc&limit=500").then(function (cs) {
+        var by = {}; cs.forEach(function (c) { (by[c.recipe_id] = by[c.recipe_id] || []).push(c); });
+        document.querySelectorAll("[data-rid]").forEach(function (card) {
+          var l = by[card.dataset.rid]; if (!l) return;
+          card.querySelector(".cprev").innerHTML = '<p style="font-size:13px;margin:8px 0 0;padding-top:8px;border-top:1px solid var(--line)"><b>💬 ' + l.length + (l.length > 1 ? " commentaires" : " commentaire") + '</b><br><span class="muted">' + esc(l[0].author || "Quelqu'un") + " : « " + esc(String(l[0].body).slice(0, 110)) + (l[0].body.length > 110 ? "…" : "") + " »</span></p>";
+        });
+      }).catch(function () {});
     }).catch(function () { $("#cl").innerHTML = '<div class="empty">Impossible de charger les recettes partagées (connexion ?).</div>'; });
   }
   function openComm(id) {
