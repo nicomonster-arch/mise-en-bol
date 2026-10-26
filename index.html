@@ -779,7 +779,9 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   function clearFilters() { filt = { q: "", cat: "", regs: [], leger: false, rapide: false, all: false }; var q = $("#q"); if (q) q.value = ""; }
   function updHome() {
     var on = anyFilter() || filt.all;
-    $("#tiles").hidden = on; $("#rdj").hidden = on;
+    $("#tiles").hidden = on;
+    var rd = $("#rdj"), tl = $("#tiles"), rs = $("#res");
+    if (on) rs.parentNode.insertBefore(rd, rs.nextSibling); else tl.parentNode.insertBefore(rd, tl);
     var bar = $("#rbar");
     if (!on) { bar.innerHTML = ""; $("#res").innerHTML = ""; return; }
     var nr = filt.regs.length;
