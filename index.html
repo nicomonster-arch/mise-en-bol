@@ -701,7 +701,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   function go(h) { H = h; try { location.hash = h; } catch (e) {} route(); }
   document.addEventListener("click", function (e) {
     var a = e.target.closest && e.target.closest("a[href^='#/']");
-    if (a) { e.preventDefault(); go(a.getAttribute("href")); }
+    if (a) { e.preventDefault(); if (a.closest("h1")) { clearFilters(); tirage = 0; } go(a.getAttribute("href")); }
   });
   function route() {
     closeCook();
