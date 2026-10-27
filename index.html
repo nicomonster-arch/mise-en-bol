@@ -993,7 +993,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   }
   function shell(inner) {
     document.getElementById("app").innerHTML =
-      '<header class="top"><h1><a href="#/" class="logo" aria-label="Mise en bol, accueil" title="Accueil">Mise en <span>bol</span></a></h1><nav class="nav"><a href="#/mes">Mes recettes' + (S.saved.length ? " (" + S.saved.length + ")" : "") + '</a><a href="#/communaute">Recettes partagées</a><button class="btn" id="theme" aria-label="Changer le thème">' + (isDark() ? "☀︎" : "☾") + '</button><a href="#/reglages">⚙︎</a></nav></header><main>' + inner + "</main>";
+      '<header class="top"><h1><a href="#/" class="logo" aria-label="Mise en bol, accueil" title="Accueil">Mise en <span>bol</span></a></h1><nav class="nav"><a href="#/mes">Mes recettes' + (S.saved.length ? " (" + S.saved.length + ")" : "") + '</a><a href="#/courses">🛒 Courses' + (S.shop.filter(function (x) { return !x.done; }).length ? ' (' + S.shop.filter(function (x) { return !x.done; }).length + ')' : '') + '</a><a href="#/communaute">Recettes partagées</a><button class="btn" id="theme" aria-label="Changer le thème">' + (isDark() ? "☀︎" : "☾") + '</button><a href="#/reglages">⚙︎</a></nav></header><main>' + inner + "</main>";
     var tb = $("#theme");
     if (tb) tb.onclick = function () { S.theme = isDark() ? "light" : "dark"; persist(); applyTheme(); tb.textContent = isDark() ? "☀︎" : "☾"; };
   }
@@ -1507,7 +1507,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
         if (ex) { if (x.p.q) ex.qs.push(x.p.q); if (ex.rs.indexOf(r.titre) === -1) ex.rs.push(r.titre); }
         else S.shop.push({ id: x.i.id, nom: x.p.nom, qs: x.p.q ? [x.p.q] : [], rs: [r.titre], done: false });
       });
-      persist(); d.close(); toast(n.length + " ajouté" + (n.length > 1 ? "s" : "") + " à ma liste de courses");
+      persist(); d.close(); go("#/courses"); toast(n.length + " ajouté" + (n.length > 1 ? "s" : "") + " à ma liste de courses");
     };
   }
   function viewShop() {
