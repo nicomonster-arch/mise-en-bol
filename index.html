@@ -201,7 +201,10 @@ dialog[open]{animation:rise .22s ease both}
 .cats .chip{white-space:nowrap;display:inline-flex;align-items:center;gap:5px;flex:none}
 .ic{flex:none}
 .card.rc{display:flex;gap:12px;align-items:flex-start}
-.rci{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--soft);color:var(--acc2)}
+.rci{flex:none;width:64px;height:64px;border-radius:16px;overflow:hidden;display:block;background:var(--soft);box-shadow:0 4px 12px rgba(0,0,0,.18)}
+.rci svg{display:block;width:100%;height:100%}
+.rart{width:100%;height:230px;border-radius:18px;overflow:hidden;margin:8px 0 10px;box-shadow:0 8px 22px rgba(0,0,0,.2)}
+.rart svg{display:block;width:100%;height:100%}
 .rcb{min-width:0;flex:1}
 .grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
 /* ---- recette du jour ---- */
@@ -749,6 +752,163 @@ var Engine = (function () {
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = Engine;
 </script>
+<script>/* Vignettes illustrées « glossy » : une scène par type de plat, couleurs selon les ingrédients. */
+(function () {
+  var N = 0;
+  function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+  function has(t, re) { return re.test(t); }
+  var BG = {
+    soupe: ["#ffb86b", "#f2603f"], mijote: ["#ff9a6b", "#c7352f"], gratin: ["#ffd27a", "#ea8a35"], pates: ["#ffd36e", "#ff8a3d"],
+    riz: ["#ffe08a", "#f0a040"], salade: ["#a6ec8e", "#2fb58a"], volaille: ["#ffb27a", "#d9662f"], viande: ["#ff9488", "#b8363a"],
+    poisson: ["#8fdcff", "#3b86e0"], gateau: ["#ffa8c4", "#a77bff"], tarte: ["#ffc2a0", "#e5707a"], biscuit: ["#ffd9a0", "#e39a55"],
+    creme: ["#ffc6e0", "#8f8bff"], glace: ["#9fe6ff", "#ff9ccf"], pain: ["#ffd98a", "#e8913a"], crepe: ["#ffe29a", "#f0963c"],
+    petitdej: ["#ffe7a0", "#f5a742"], boisson: ["#8fe9ee", "#4a9be0"], pot: ["#c9f28f", "#52b968"], oeuf: ["#ffe680", "#ffa94a"],
+    burger: ["#ffc77a", "#d9552f"], pizza: ["#ffbf70", "#d94a35"], legume: ["#b2f08a", "#36b27a"], defaut: ["#cdbcff", "#7f78ee"]
+  };
+  function tone(t) {
+    if (has(t, /chocolat|cacao|brownie|moka|cafe\b/)) return ["#9a5a3a", "#4a2a1c"];
+    if (has(t, /fraise|framboise|cerise|fruits-rouges|fruits rouges|betterave|myrtille|groseille/)) return ["#ff7f98", "#c4274f"];
+    if (has(t, /citron|banane|ananas|mangue/)) return ["#ffe66b", "#f3b72e"];
+    if (has(t, /pomme|poire|coing|abricot|peche|noix|noisette|amande|caramel|miel|speculoos/)) return ["#f7c670", "#c98a34"];
+    if (has(t, /epinard|courgette|brocoli|poireau|petit-pois|petits pois|basilic|pesto|cresson|concombre|avocat|persil|asperge|haricot-vert|chou\b|choux|menthe|pistache|matcha/)) return ["#9fd870", "#4c9a45"];
+    if (has(t, /tomate|poivron|chorizo|harissa|piment|bolognaise/)) return ["#ff7a55", "#c8321f"];
+    if (has(t, /carotte|potiron|potimarron|courge|patate-douce|curry|orange|butternut|safran|mangue|lentille-corail/)) return ["#ffae52", "#e5701f"];
+    if (has(t, /champignon|lentille|chataigne|oignon|bouillon|boeuf|bourguignon|marron/)) return ["#c79a72", "#7d5435"];
+    return ["#ffe9c2", "#f2c27a"];
+  }
+  function kind(r) {
+    var t = norm(r.titre), ing = norm((r.ingredients || []).map(function (i) { return i.id; }).join(" ")), c = r.categorie;
+    var all = t + " " + ing;
+    if (has(t, /glace|sorbet|esquimau/)) return "glace";
+    if (has(t, /burger|sandwich|croque|wrap|kebab|hot-dog|hot dog/)) return "burger";
+    if (has(t, /pizza|focaccia|flammekueche|tarte flambee/)) return "pizza";
+    if (c === "soupe" || has(t, /soupe|veloute|potage|bouillon|gaspacho|minestrone|bisque|chorba|pho\b|ramen|miso|tourin|mulligatawny|rasam|borsch|chtchi|congee|harira/)) return "soupe";
+    if (has(t, /crepe|pancake|gaufre|blini|galette de sarrasin|galettes? sarrasin|beignet|pain perdu|pain-perdu|waffle|donut|churros|pancakes/)) return "crepe";
+    if (has(t.replace(/sans oeufs?/g, "").replace(/oeufs? (au lait|a la neige|en neige)/g, ""), /omelette|oeuf|frittata|brouille|shakshuka/)) return "oeuf";
+    if (has(t, /smoothie|limonade|boisson|chocolat chaud|golden milk|milkshake|infusion|^cocktail|\blassi|^jus |^lait (d|de) |^granite|^the |^cafe |^chai/)) return "boisson";
+    if (has(t, /salade|taboule|crudites|carpaccio|coleslaw|cesar|nicoise|tzatziki|houmous|guacamole|caviar/)) return has(t, /houmous|tzatziki|guacamole|caviar/) ? "pot" : "salade";
+    if (has(t, /pates|spaghetti|lasagne|tagliatelle|penne|macaroni|gnocchi|ravioli|tortellini|nouilles|carbonara|bolognaise|linguine|fusilli|pad thai|udon|vermicelle/)) return has(t, /lasagne|gratin/) ? "gratin" : "pates";
+    if (has(t, /gratin|hachis|parmentier|moussaka|dauphinois|tartiflette|clafoutis sale|croziflette|cannelloni|aligot/)) return "gratin";
+    if (has(t, /risotto|riz|paella|pilaf|couscous|semoule|quinoa|boulgour|biryani|jambalaya|poke|bowl/) && !has(t, /riz au lait|semoule au lait|gateau/)) return "riz";
+    if (has(t, /tarte|quiche|tourte|tourtiere|clafoutis|flan\b|pie\b|galette des rois|chausson|feuillete|tatin|crumble|bouchee/)) return "tarte";
+    if (has(t, /cookie|biscuit|sable|macaron|meringue|speculoos|palet|bretzel|tuile|rocher|madeleine|financier|cantuccini|croquant|spritz|cracker|craquant/)) return "biscuit";
+    if (has(t, /(muffins?|cakes?) sales?|cake sale/)) return "tarte";
+    if (has(t, /gateau|cake|muffin|brownie|\bfondant\b|moelleux|charlotte|tiramisu|cheesecake|bundt|savarin|quatre-quarts|quatre quarts|eclair|profiterole|opera|roule|biscuit roule|forêt|foret|buche|pavlova|baba|kouign|far breton/)) return has(t, /tiramisu|charlotte|cheesecake|pavlova/) ? "creme" : "gateau";
+    if (has(t, /mousse|creme|panna|verrine|riz au lait|semoule au lait|yaourt|fromage blanc|flan|pudding|compote|clafoutis|ile flottante|oeufs au lait|brulee|dessert|salade de fruits|faisselle|skyr|porridge|granola|muesli|overnight|bircher|chia/)) return has(t, /porridge|granola|muesli|overnight|bircher|chia|yaourt|fromage blanc/) ? "petitdej" : "creme";
+    if (has(t, /pain|brioche|baguette|fougasse|focaccia|croissant|pain de mie|bagel|naan|chapati|pita|buns|tortilla|petrin|levain|ciabatta|pain au lait|viennoiserie|toast|tartine/)) return "pain";
+    if (has(t, /poulet|dinde|volaille|canard|pintade|cuisse|\baile|lapin|poule|coq\b|nuggets|poulette|caille/)) return has(t, /curry|tajine|blanquette|fricassee|ragout|mijote|cassoulet|chili|colombo|massaman|tikka|marengo|basquaise|cocotte|vallee d.auge|coco|korma|butter|yassa|mafe/) ? "mijote" : "volaille";
+    if (has(t, /poisson|saumon|cabillaud|thon|crevette|moule|colin|merlu|sardine|truite|dorade|bar\b|lotte|maquereau|haddock|morue|brandade|calamar|encornet|gambas|saint-jacques|coquille|fruits de mer|aioli|bouillabaisse|poke|sole|raie|lieu\b/)) return has(t, /curry|moqueca|bouillabaisse|marmite|ragout|bourride|tajine/) ? "mijote" : "poisson";
+    if (has(t, /curry|tajine|ragout|blanquette|daube|bourguignon|chili|cassoulet|mijote|potee|pot-au-feu|pot au feu|navarin|osso|goulash|feijoada|colombo|rendang|massaman|tikka|dal\b|dhal|ratatouille|fricassee|waterzooi|stew|carbonade|couscous|chakchouka|chakhokhbili|bobotie|kedjenou|doro|mafe|yassa|gyudon|lobio|adobo|boulets|hochepot|sauce tomate|jardiniere|compotee|cocotte/)) return "mijote";
+    if (has(t, /boeuf|steak|porc|agneau|veau|roti|cote|saucisse|jambon|lardons|bacon|escalope|brochette|kefta|merguez|burger|boulette|filet|gigot|rillettes|terrine|paleron|entrecote|magret|cervelas|boudin|andouillette|rouelle|travers|ribs|hampe|onglet|faux-filet|rosbif|emince|stroganoff|saute/)) return "viande";
+    if (c === "sauce-base" || has(t, /sauce|vinaigrette|mayonnaise|pesto|coulis|confiture|pate a|pate brisee|pate sablee|bechamel|hollandaise|ketchup|chutney|marinade|rouille|salsa|tapenade|pate a tartiner|miel|gelee|pickles|bouillon maison|fond de|epice|assaisonnement|houmous/)) return "pot";
+    if (c === "pain-petit-dej") return has(t, /pain|brioche|fougasse/) ? "pain" : "petitdej";
+    if (c === "dessert") return "gateau";
+    if (has(all, /carotte|courgette|haricot|aubergine|poireau|chou|brocoli|poivron|epinard|champignon|legume|pomme-de-terre|patate|puree|asperge|artichaut|endive|fenouil|navet|potiron|celeri|radis|petit-pois|mais\b/)) return "legume";
+    return "defaut";
+  }
+  /* ---- dessin ---- */
+  function build(r) {
+    var k = kind(r), t = norm(r.titre + " " + (r.ingredients || []).map(function (i) { return i.id; }).join(" ")), tt = tone(t);
+    var u = ++N, D = [], bg = BG[k] || BG.defaut;
+    function g(a, b, dir) {
+      var id = "a" + u + "_" + D.length, d = dir === "h" ? 'x2="1" y2="0"' : dir === "d" ? 'x2="1" y2="1"' : 'x2="0" y2="1"';
+      D.push('<linearGradient id="' + id + '" x1="0" y1="0" ' + d + '><stop offset="0" stop-color="' + a + '"/><stop offset="1" stop-color="' + b + '"/></linearGradient>');
+      return "url(#" + id + ")";
+    }
+    var sh = (function () { var id = "s" + u; D.push('<linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>'); return "url(#" + id + ")"; })();
+    function shine(cx, cy, rx, ry, rot) { return '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '" fill="' + sh + '" transform="rotate(' + (rot || 0) + " " + cx + " " + cy + ')"/>'; }
+    function shadow(cx, cy, rx) { return '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + rx / 6 + '" fill="#000" opacity=".22"/>'; }
+    var porc = g("#ffffff", "#d9dde6"), porcD = g("#eef0f6", "#b9bfce");
+    function bowl(cy) { cy = cy || 46; return '<path d="M12 ' + cy + "h76c0 24-16 38-38 38S12 " + (cy + 24) + " 12 " + cy + 'z" fill="' + porc + '"/>' + shine(30, cy + 16, 9, 4.5, 50) + '<path d="M40 ' + (cy + 36) + 'h20" stroke="#fff" stroke-width="3" opacity=".5" stroke-linecap="round"/>'; }
+    function steam(x0) { return '<path d="M' + x0 + ' 30c-6-6 6-10 0-17M' + (x0 + 14) + ' 30c-6-6 6-10 0-17M' + (x0 + 28) + ' 30c-6-6 6-10 0-17" stroke="#fff" stroke-opacity=".8" stroke-width="3.2" fill="none" stroke-linecap="round"/>'; }
+    var s = "";
+    if (k === "soupe") {
+      s = shadow(50, 90, 34) + bowl(46) + '<ellipse cx="50" cy="46" rx="38" ry="9" fill="' + g(tt[0], tt[1]) + '"/><path d="M26 46c8-5 12 3 20-1s12 3 20-1 8 1 10 0" stroke="#fff" stroke-opacity=".6" stroke-width="3" fill="none" stroke-linecap="round"/>' +
+        '<circle cx="40" cy="45" r="2.6" fill="#7bd05f"/><circle cx="60" cy="47" r="2.2" fill="#7bd05f"/><circle cx="52" cy="43" r="2" fill="#fff"/>' + shine(34, 43, 10, 2.6, -8) + steam(36);
+    } else if (k === "mijote") {
+      var pot = g("#6c7385", "#2b2f3b");
+      s = shadow(50, 90, 36) + '<path d="M16 44h68v22c0 12-10 20-22 20H38c-12 0-22-8-22-20z" fill="' + pot + '"/><rect x="10" y="40" width="80" height="9" rx="4.5" fill="' + g("#8b93a8", "#434859") + '"/>' +
+        '<ellipse cx="50" cy="42" rx="34" ry="4" fill="' + g(tt[0], tt[1]) + '"/><rect x="6" y="52" width="9" height="6" rx="3" fill="#434859"/><rect x="85" y="52" width="9" height="6" rx="3" fill="#434859"/>' + shine(28, 62, 5, 14, 12) + steam(36);
+    } else if (k === "gratin") {
+      s = shadow(50, 84, 38) + '<rect x="8" y="44" width="84" height="38" rx="10" fill="' + g("#ffffff", "#c9cfdc") + '"/><rect x="14" y="46" width="72" height="14" rx="7" fill="' + g("#ffd27a", "#d98a2b") + '"/>' +
+        '<path d="M20 52c5-4 9 3 14-1s9 3 14-1 9 3 14-1 9 3 14-1" stroke="#b86a1c" stroke-width="3" fill="none" stroke-linecap="round" opacity=".7"/><circle cx="30" cy="54" r="2" fill="#fff" opacity=".7"/><circle cx="64" cy="55" r="2" fill="#fff" opacity=".7"/>' + shine(26, 68, 8, 4, 0) + '<path d="M38 28c-5-5 5-8 0-14M52 28c-5-5 5-8 0-14M66 28c-5-5 5-8 0-14" stroke="#fff" stroke-opacity=".8" stroke-width="3.2" fill="none" stroke-linecap="round"/>';
+    } else if (k === "pates") {
+      s = shadow(50, 88, 38) + '<ellipse cx="50" cy="62" rx="40" ry="22" fill="' + porc + '"/><ellipse cx="50" cy="60" rx="28" ry="14" fill="' + porcD + '"/>' +
+        '<path d="M26 58c8-14 40-14 48 0M30 62c6-10 34-10 40 0M34 54c6-6 26-6 32 0M28 60c10 8 34 8 44 0" stroke="' + "#f7c948" + '" stroke-width="4.5" fill="none" stroke-linecap="round"/>' +
+        '<ellipse cx="50" cy="52" rx="13" ry="7" fill="' + g(tt[0] === "#ffe9c2" ? "#ff7a55" : tt[0], tt[1] === "#f2c27a" ? "#c8321f" : tt[1]) + '"/><path d="M48 44l-5-8 8 3z" fill="#4fb35a"/><path d="M54 45l6-7-9 1z" fill="#6fce6a"/>' + shine(32, 52, 8, 3, -20);
+    } else if (k === "riz") {
+      s = shadow(50, 90, 34) + bowl(50) + '<path d="M18 50c0-22 14-30 32-30s32 8 32 30z" fill="' + g("#ffffff", "#ecebe4") + '"/>' +
+        '<g fill="' + g(tt[0], tt[1]) + '"><circle cx="38" cy="40" r="5"/><circle cx="52" cy="34" r="5.5"/><circle cx="64" cy="42" r="4.5"/></g><path d="M30 48l8-4M56 46l8-3" stroke="#ffe08a" stroke-width="3" stroke-linecap="round"/><circle cx="44" cy="30" r="2" fill="#7bd05f"/><circle cx="58" cy="28" r="2" fill="#7bd05f"/>' + shine(34, 36, 6, 9, 30);
+    } else if (k === "salade") {
+      s = shadow(50, 90, 34) + '<path d="M12 48h76c0 24-16 38-38 38S12 72 12 48z" fill="' + g("#ffffff", "#b9d9e8") + '" opacity=".95"/>' +
+        '<g><ellipse cx="32" cy="42" rx="14" ry="9" fill="' + g("#9be36a", "#3f9d45") + '" transform="rotate(-20 32 42)"/><ellipse cx="64" cy="40" rx="15" ry="9" fill="' + g("#8bdc5a", "#2f8a3f") + '" transform="rotate(18 64 40)"/><ellipse cx="48" cy="34" rx="13" ry="8" fill="' + g("#b6f080", "#4aa94a") + '"/></g>' +
+        '<circle cx="40" cy="46" r="6.5" fill="' + g("#ff8c70", "#d6321f") + '"/><circle cx="62" cy="48" r="6" fill="' + g("#ff8c70", "#d6321f") + '"/><circle cx="51" cy="42" r="5" fill="' + g("#fff3a8", "#f1c232") + '"/><circle cx="38" cy="44" r="1.8" fill="#fff" opacity=".8"/>' + shine(28, 64, 8, 4, 40);
+    } else if (k === "volaille") {
+      s = shadow(50, 88, 30) + '<rect x="62" y="52" width="9" height="28" rx="4.5" fill="#f3ead8" transform="rotate(-35 66 66)"/><circle cx="74" cy="80" r="6" fill="#f3ead8"/><circle cx="82" cy="74" r="5" fill="#f3ead8"/>' +
+        '<path d="M16 46c2-18 24-24 38-14 12 8 14 22 6 30-10 10-26 10-36 4-6-4-9-12-8-20z" fill="' + g("#f6b24e", "#a85a1b") + '"/><path d="M26 36c8-6 20-6 28 2" stroke="#fff" stroke-opacity=".5" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="34" cy="54" r="2" fill="#7a3d10" opacity=".6"/><circle cx="46" cy="60" r="2" fill="#7a3d10" opacity=".6"/>' + shine(30, 38, 10, 5, -20);
+    } else if (k === "viande") {
+      s = shadow(50, 84, 38) + '<ellipse cx="50" cy="62" rx="42" ry="20" fill="' + porc + '"/><path d="M18 58c0-16 16-24 34-22 20 2 30 14 26 26-4 10-20 14-36 12-14-2-24-6-24-16z" fill="' + g("#c9613d", "#6f2a1b") + '"/>' +
+        '<path d="M30 46l14 14M44 42l16 16M58 42l12 12" stroke="#3b140c" stroke-width="3.5" stroke-linecap="round" opacity=".6"/><circle cx="72" cy="46" r="3.5" fill="#4aae55"/><circle cx="68" cy="42" r="2.5" fill="#6fce6a"/>' + shine(34, 46, 12, 4, -15);
+    } else if (k === "poisson") {
+      s = shadow(50, 86, 34) + '<path d="M82 50l14-14v28z" fill="' + g("#7cc4ff", "#2f6fd0") + '"/><path d="M10 50c8-18 38-26 62-6 2 4 2 8 0 12-24 20-54 12-62-6z" fill="' + g("#cfe9ff", "#4a89e0") + '"/>' +
+        '<path d="M22 50c12 4 28 2 46-4" stroke="#fff" stroke-opacity=".6" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="26" cy="46" r="3.2" fill="#13203d"/><circle cx="25" cy="45" r="1" fill="#fff"/><path d="M48 36c4 4 4 10 0 14M58 38c4 4 4 10 0 14" stroke="#2f6fd0" stroke-width="2.5" fill="none" opacity=".5" stroke-linecap="round"/>' + shine(40, 40, 14, 4, -10);
+    } else if (k === "gateau") {
+      s = shadow(50, 86, 38) + '<path d="M12 72V44l76-10v38a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6z" fill="' + g(tt[0], tt[1]) + '"/><path d="M12 56l76-9v7L12 63z" fill="#fff3d9"/><path d="M12 44l76-10v8L12 52z" fill="' + g("#fffaf0", "#f3ddba") + '"/>' +
+        '<path d="M14 44c6 8 8 0 12 6s8-2 14 4 8-4 14 2" stroke="#fff" stroke-width="3" fill="none" opacity=".6"/><circle cx="52" cy="30" r="8" fill="' + g("#ff6b83", "#c4163a") + '"/><path d="M52 22c0-6 5-9 9-9" stroke="#3f9d45" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="49" cy="27" r="2.2" fill="#fff" opacity=".85"/>' + shine(26, 62, 10, 4, 0);
+    } else if (k === "tarte") {
+      var sav = !has(norm(r.categorie), /dessert/) && r.categorie !== "dessert";
+      s = shadow(50, 88, 38) + '<ellipse cx="50" cy="56" rx="42" ry="26" fill="' + g("#e8b46b", "#9c5f26") + '"/><ellipse cx="50" cy="54" rx="34" ry="20" fill="' + (sav ? g("#ffe9a0", "#f0b94a") : g(tt[0], tt[1])) + '"/>' +
+        (sav ? '<circle cx="38" cy="52" r="3.5" fill="#d98a2b"/><circle cx="56" cy="58" r="3.5" fill="#7bd05f"/><circle cx="62" cy="48" r="3" fill="#d98a2b"/><circle cx="46" cy="62" r="3" fill="#7bd05f"/>' :
+          '<g fill="' + g("#fff6dc", "#f6cf6e") + '"><circle cx="40" cy="50" r="5"/><circle cx="54" cy="48" r="5"/><circle cx="62" cy="58" r="5"/><circle cx="44" cy="62" r="5"/><circle cx="50" cy="55" r="4.2"/></g>') + shine(38, 46, 16, 5, -10);
+    } else if (k === "biscuit") {
+      var bc = g("#f1c27a", "#b9742f");
+      s = shadow(50, 88, 36) + '<circle cx="36" cy="58" r="24" fill="' + bc + '"/><circle cx="66" cy="44" r="20" fill="' + g("#f6cd8a", "#c5822f") + '"/>' +
+        '<g fill="#4a2a1c"><circle cx="28" cy="52" r="3.4"/><circle cx="42" cy="66" r="3.4"/><circle cx="44" cy="50" r="3"/><circle cx="26" cy="68" r="2.6"/><circle cx="62" cy="38" r="3"/><circle cx="72" cy="50" r="3"/><circle cx="58" cy="50" r="2.4"/></g>' + shine(28, 48, 10, 4, -30);
+    } else if (k === "creme") {
+      s = shadow(50, 90, 26) + '<path d="M26 36h48l-5 44c-.5 5-4 8-9 8H40c-5 0-8.500-3-9-8z" fill="' + g("#ffffff", "#dfe6f2") + '" opacity=".95"/><path d="M29 62h42l-2 18c-.5 4-4 7-8 7H39c-4 0-7.500-3-8-7z" fill="' + g(tt[0], tt[1]) + '"/><path d="M28 50h44l-1.500 12H29.500z" fill="' + g("#fffaf0", "#f7e1b5") + '"/>' +
+        '<path d="M32 38c4-8 12-10 18-10s14 2 18 10c-6 2-12 0-18 0s-12 2-18 0z" fill="' + g("#ffffff", "#f3e2f0") + '"/><circle cx="50" cy="26" r="6" fill="' + g("#ff6b83", "#c4163a") + '"/><circle cx="48" cy="24" r="1.8" fill="#fff" opacity=".85"/>' + shine(34, 56, 3.5, 20, 6);
+    } else if (k === "glace") {
+      s = shadow(50, 92, 16) + '<path d="M34 54h32L50 92z" fill="' + g("#f4c880", "#c98a3a") + '"/><path d="M40 60l10 24M50 58l6 24M44 60l-4 6" stroke="#a36824" stroke-width="2" opacity=".5"/>' +
+        '<circle cx="50" cy="44" r="19" fill="' + g(tt[0] === "#ffe9c2" ? "#ffd1e8" : tt[0], tt[1] === "#f2c27a" ? "#ff7fb7" : tt[1]) + '"/><circle cx="38" cy="30" r="14" fill="' + g("#fff6dc", "#f4d98a") + '"/><circle cx="62" cy="30" r="14" fill="' + g("#c9f2ff", "#6fc4f0") + '"/>' +
+        '<circle cx="50" cy="20" r="6" fill="' + g("#ff6b83", "#c4163a") + '"/>' + shine(34, 24, 6, 9, 20);
+    } else if (k === "pain") {
+      s = shadow(50, 84, 38) + '<path d="M10 66c0-24 18-38 40-38s40 14 40 38c0 8-5 12-12 12H22c-7 0-12-4-12-12z" fill="' + g("#f6c36e", "#b8671f") + '"/><path d="M28 46l10 14M46 40l10 16M64 46l8 12" stroke="#fff0c8" stroke-width="4.5" stroke-linecap="round" opacity=".85"/>' +
+        '<circle cx="30" cy="68" r="1.6" fill="#8a4a14" opacity=".6"/><circle cx="60" cy="70" r="1.6" fill="#8a4a14" opacity=".6"/>' + shine(34, 40, 14, 5, -25);
+    } else if (k === "crepe") {
+      s = shadow(50, 86, 34) + '<ellipse cx="50" cy="68" rx="34" ry="11" fill="' + g("#f2bd68", "#bd7425") + '"/><ellipse cx="50" cy="60" rx="34" ry="11" fill="' + g("#f6cb7e", "#cf8630") + '"/><ellipse cx="50" cy="52" rx="34" ry="11" fill="' + g("#fbd68e", "#d99038") + '"/>' +
+        '<path d="M26 52c4 12 8 4 12 14s6 0 10 8 6-4 10 4 6-6 8-6" stroke="#a65a10" stroke-width="5" fill="none" stroke-linecap="round" opacity=".0"/><path d="M30 50c0 10 4 8 4 14 0 4 4 4 4 0 0-8 6-4 6-12" fill="' + g("#e59a2e", "#9a4d08") + '"/><rect x="42" y="38" width="16" height="10" rx="3" fill="' + g("#fff7b0", "#f6df5a") + '" transform="rotate(-6 50 43)"/>' + shine(34, 46, 12, 3.5, -8);
+    } else if (k === "boisson") {
+      s = shadow(50, 91, 22) + '<path d="M28 24h44l-6 60c-.4 4-3.500 7-8 7H42c-4.500 0-7.600-3-8-7z" fill="#fff" opacity=".35"/><path d="M31 44h38l-4 40c-.4 4-3.500 6-8 6H43c-4.500 0-7.600-2-8-6z" fill="' + g(tt[0] === "#ffe9c2" ? "#ffb36b" : tt[0], tt[1] === "#f2c27a" ? "#ff6b6b" : tt[1]) + '"/>' +
+        '<path d="M62 8L54 46" stroke="' + g("#ff7a8a", "#d6264a") + '" stroke-width="5" stroke-linecap="round"/><ellipse cx="50" cy="44" rx="19" ry="3.500" fill="#fff" opacity=".45"/><circle cx="76" cy="30" r="7" fill="#ffd34d"/>' + shine(36, 60, 3.500, 20, 4);
+    } else if (k === "pot") {
+      s = shadow(50, 90, 28) + '<rect x="24" y="24" width="52" height="12" rx="4" fill="' + g("#e8edf5", "#98a2b6") + '"/><path d="M26 36h48v38c0 10-6 16-14 16H40c-8 0-14-6-14-16z" fill="#fff" opacity=".4"/><path d="M28 46h44v28c0 9-5 14-12 14H40c-7 0-12-5-12-14z" fill="' + g(tt[0], tt[1]) + '"/>' +
+        '<rect x="34" y="54" width="32" height="18" rx="4" fill="#fffaf0" opacity=".92"/><path d="M39 60h22M39 66h14" stroke="#c8b99a" stroke-width="2.500" stroke-linecap="round"/>' + shine(33, 62, 3.500, 17, 4);
+    } else if (k === "oeuf") {
+      s = shadow(50, 86, 38) + '<ellipse cx="50" cy="60" rx="42" ry="22" fill="' + porc + '"/><path d="M20 58c-2-14 12-22 26-20 10-4 26 0 32 12 6 12-8 24-26 24-16 4-30-2-32-16z" fill="#fff"/><circle cx="48" cy="54" r="12" fill="' + g("#ffd84d", "#f08a1c") + '"/><circle cx="44" cy="50" r="3.600" fill="#fff" opacity=".85"/><circle cx="74" cy="48" r="2.500" fill="#4aae55"/><circle cx="26" cy="64" r="2.200" fill="#4aae55"/>' + shine(30, 48, 8, 3, -20);
+    } else if (k === "burger") {
+      s = shadow(50, 90, 34) + '<path d="M16 46c0-18 14-26 34-26s34 8 34 26z" fill="' + g("#f6c36e", "#c27a2b") + '"/><g fill="#fff0c8"><ellipse cx="38" cy="32" rx="3" ry="1.800"/><ellipse cx="54" cy="28" rx="3" ry="1.800"/><ellipse cx="66" cy="36" rx="3" ry="1.800"/></g>' +
+        '<path d="M12 48c4 6 8-2 12 4s8-2 12 4 8-2 12 4 8-2 12 4 8-2 12 2v-12H12z" fill="' + g("#9be36a", "#3f9d45") + '"/><rect x="14" y="56" width="72" height="9" rx="4.500" fill="' + g("#8a4a2a", "#3f1d10") + '"/><rect x="18" y="52" width="64" height="5" rx="2" fill="#ffc83d"/>' +
+        '<path d="M14 68h72c0 12-6 18-14 18H28c-8 0-14-6-14-18z" fill="' + g("#f1b75c", "#b8671f") + '"/>' + shine(32, 30, 10, 4, -25);
+    } else if (k === "pizza") {
+      s = shadow(50, 90, 36) + '<circle cx="50" cy="52" r="40" fill="' + g("#f0b866", "#b8671f") + '"/><circle cx="50" cy="52" r="34" fill="' + g("#ff8a5c", "#c8321f") + '"/><circle cx="50" cy="52" r="31" fill="' + g("#ffe9a0", "#f4bf4e") + '"/>' +
+        '<g fill="' + g("#e8503a", "#a31d1d") + '"><circle cx="38" cy="42" r="6"/><circle cx="62" cy="44" r="6"/><circle cx="50" cy="62" r="6"/><circle cx="34" cy="62" r="4.500"/></g><g fill="#4aae55"><circle cx="52" cy="40" r="2.500"/><circle cx="66" cy="58" r="2.500"/><circle cx="42" cy="54" r="2.500"/></g>' + shine(36, 32, 16, 5, -35);
+    } else if (k === "petitdej") {
+      s = shadow(50, 90, 34) + bowl(46) + '<ellipse cx="50" cy="46" rx="37" ry="9" fill="' + g("#ffffff", "#f1ece0") + '"/><g fill="#d89a4a"><circle cx="34" cy="45" r="2.800"/><circle cx="44" cy="48" r="2.500"/><circle cx="58" cy="44" r="2.800"/><circle cx="66" cy="48" r="2.200"/></g>' +
+        '<circle cx="46" cy="42" r="5" fill="' + g("#ff6b83", "#c4163a") + '"/><circle cx="56" cy="43" r="4.500" fill="' + g("#7c8cff", "#3a3fb8") + '"/><circle cx="52" cy="40" r="3.800" fill="' + g("#ff6b83", "#c4163a") + '"/><circle cx="44" cy="40.500" r="1.400" fill="#fff"/>';
+    } else if (k === "legume") {
+      s = shadow(50, 88, 36) + '<path d="M18 78c-4-4 20-34 30-42l8 8c-8 10-26 40-30 36-2-.5-6-2-8-2z" fill="' + g("#ffa04d", "#e0551a") + '" transform="rotate(-8 40 60)"/><path d="M46 34c-6-4-6-14 2-16 2 6 6 8 6 12M50 36c4-8 12-10 16-6-2 6-6 8-10 10" fill="' + g("#7bd05f", "#2f8a3f") + '"/>' +
+        '<circle cx="68" cy="66" r="11" fill="' + g("#9be36a", "#3f9d45") + '"/><circle cx="58" cy="60" r="8" fill="' + g("#b6f080", "#4aa94a") + '"/><circle cx="76" cy="58" r="8" fill="' + g("#8bdc5a", "#2f8a3f") + '"/><rect x="64" y="72" width="8" height="12" rx="3" fill="#b6e08a"/>' + shine(30, 56, 4, 14, 36);
+    } else {
+      s = shadow(50, 88, 38) + '<circle cx="50" cy="56" r="34" fill="' + porc + '"/><circle cx="50" cy="56" r="22" fill="' + porcD + '"/><path d="M12 30v26M8 30v10c0 4 8 4 8 0V30M12 56v18M90 30c-6 4-6 16 0 22v22" stroke="#fff" stroke-width="3.500" fill="none" stroke-linecap="round" opacity=".9"/>' + shine(36, 42, 10, 5, -30);
+    }
+    var bgx = '<rect width="100" height="100" fill="' + g(bg[0], bg[1], "d") + '"/>' +
+      '<circle cx="84" cy="14" r="26" fill="#fff" opacity=".16"/><circle cx="12" cy="92" r="22" fill="#fff" opacity=".1"/>';
+    var gloss = '<path d="M0 0h100v38C72 52 28 24 0 46z" fill="#fff" opacity=".2"/><rect x="1" y="1" width="98" height="98" rx="0" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="2"/>';
+    return '<svg viewBox="0 0 100 100" role="img" aria-label="Illustration" xmlns="http://www.w3.org/2000/svg"><defs>' + D.join("") + "</defs>" + bgx + s + gloss + "</svg>";
+  }
+  window.MEB_ART = { build: build, kind: kind };
+})();
+</script>
 <script>/* Interface « Mise en bol » — dépend de Engine et de window.MEB_DATA */
 (function () {
   "use strict";
@@ -836,12 +996,14 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   };
   function ico(n, sz) { return '<svg class="ic" width="' + (sz || 26) + '" height="' + (sz || 26) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[n] + "</svg>"; }
   var CATIC = { "soupe": "soupe", "sauce-base": "sauce", "plat": "plat", "dessert": "dessert", "pain-petit-dej": "pain" };
+  var ARTC = {};
+  function art(r) { return ARTC[r.id] || (ARTC[r.id] = (window.MEB_ART ? window.MEB_ART.build(r) : "")); }
   function card(r) {
     var rg = E.regimesOf(r).list, tags = [];
     if (r.leger) tags.push('<span class="tag leaf">Allégée</span>');
     if (rg.indexOf("vegan") !== -1) tags.push('<span class="tag">Végétal</span>');
     else if (rg.indexOf("vegetarien") !== -1) tags.push('<span class="tag">Végétarien</span>');
-    return '<a class="card rc" href="#/r/' + encodeURIComponent(r.id) + '"><span class="rci">' + ico(r.leger ? "leger" : CATIC[r.categorie] || "plat", 22) + '</span><span class="rcb"><h3>' + esc(r.titre) + "</h3><p>" + esc(r.description) + '</p><div class="meta"><span>⏱ ' + E.fmtDurMin(r.temps.total_min) + "</span><span>👥 " + r.portions + "</span>" + tags.join("") + "</div></span></a>";
+    return '<a class="card rc" href="#/r/' + encodeURIComponent(r.id) + '"><span class="rci">' + art(r) + '</span><span class="rcb"><h3>' + esc(r.titre) + "</h3><p>" + esc(r.description) + '</p><div class="meta"><span>⏱ ' + E.fmtDurMin(r.temps.total_min) + "</span><span>👥 " + r.portions + "</span>" + tags.join("") + "</div></span></a>";
   }
   function anyFilter() { return !!(filt.q.trim() || filt.cat || filt.cuisine || filt.leger || filt.rapide || filt.regs.length); }
   function viewHome() {
@@ -875,7 +1037,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     var el = $("#rdj"); if (!el) return;
     var x = E.recetteDuJour(new Date(), tirage), r = x.recipe;
     el.innerHTML = '<div class="rdj"><div class="rdj-top"><span class="rdj-l">Recette du jour · ' + esc(x.mois) + '</span><button class="btn sm ghost" id="rdjn" aria-label="Autre idée">↻ Autre idée</button></div>' +
-      '<a class="rdj-main" href="#/r/' + encodeURIComponent(r.id) + '"><span class="rci">' + ico(r.leger ? "leger" : CATIC[r.categorie] || "plat", 26) + '</span><span class="rcb"><h3>' + esc(r.titre) + "</h3><p>" + esc(r.description) + "</p>" +
+      '<a class="rdj-main" href="#/r/' + encodeURIComponent(r.id) + '"><span class="rci">' + art(r) + '</span><span class="rcb"><h3>' + esc(r.titre) + "</h3><p>" + esc(r.description) + "</p>" +
       (x.saison.length ? '<div class="rdj-s">🌱 De saison : ' + esc(x.saison.join(", ")) + "</div>" : "") +
       '<div class="meta"><span>⏱ ' + E.fmtDurMin(r.temps.total_min) + "</span><span>👥 " + r.portions + "</span>" + (r.leger ? '<span class="tag leaf">Allégée</span>' : "") + "</div></span></a></div>";
     $("#rdjn").onclick = function () { tirage++; renderRdj(); };
@@ -979,7 +1141,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       var m = x.missing.length;
       var info = m ? '<div class="miss">À acheter : ' + esc(x.missing.map(ingName).join(", ")) + "</div>" : '<div class="miss ok">✓ Tout est là</div>';
       if (x.subs.length) info += '<div class="miss sub">↔ Remplacé : ' + esc(x.subs.map(function (z) { return ingName(z.de) + " par " + ingName(z.par); }).join(", ")) + "</div>";
-      return '<a class="card rc" href="#/r/' + encodeURIComponent(x.r.id) + '"><span class="rci">' + ico(x.r.leger ? "leger" : CATIC[x.r.categorie] || "plat", 22) + '</span><span class="rcb"><h3>' + esc(x.r.titre) + "</h3>" + info + '<div class="meta"><span>⏱ ' + E.fmtDurMin(x.r.temps.total_min) + "</span><span>" + x.used + "/" + x.total + " ingrédients</span></div></span></a>";
+      return '<a class="card rc" href="#/r/' + encodeURIComponent(x.r.id) + '"><span class="rci">' + art(x.r) + '</span><span class="rcb"><h3>' + esc(x.r.titre) + "</h3>" + info + '<div class="meta"><span>⏱ ' + E.fmtDurMin(x.r.temps.total_min) + "</span><span>" + x.used + "/" + x.total + " ingrédients</span></div></span></a>";
     };
     var h = '<p class="muted" style="font-size:13px;margin:12px 0 0">Les recettes qui utilisent ce que tu as, de la plus simple (rien à acheter) à celle qui demande le plus de courses.</p>';
     if (nHave > 1) {
@@ -1168,7 +1330,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     var rg = E.regimesOf(r).list, tags = [];
     E.REGS.forEach(function (g) { if (rg.indexOf(g[0]) !== -1) tags.push('<span class="tag">' + g[1] + "</span>"); });
     var lighter = E.lighterOf(base.id).filter(function () { return !cur.sid; });
-    var h = '<a href="' + (cur.sid ? "#/mes" : "#/") + '" class="muted" style="text-decoration:none">← Retour</a><h2>' + esc(r.titre) + '</h2><p class="muted" style="margin:0 0 8px">' + esc(r.description) + "</p>" +
+    var h = '<a href="' + (cur.sid ? "#/mes" : "#/") + '" class="muted" style="text-decoration:none">← Retour</a><h2>' + esc(r.titre) + '</h2><div class="rart">' + art(base).replace("<svg ", '<svg preserveAspectRatio="xMidYMid slice" ') + '</div><p class="muted" style="margin:0 0 8px">' + esc(r.description) + "</p>" +
       '<div class="meta" style="margin-bottom:6px"><span>⏱ préparation ' + E.fmtDurMin(r.temps.preparation_min) + " · cuisson " + E.fmtDurMin(r.temps.cuisson_min) + "</span><span>· " + esc(r.difficulte) + "</span></div>" +
       (r.leger && r.derive_de ? '<div class="warn info" style="border-left-color:var(--leaf)">🌿 <b>Version allégée</b>' + (E.getRecipe(r.derive_de) ? ' de <a href="#/r/' + r.derive_de + '">' + esc(E.getRecipe(r.derive_de).titre) + "</a>" : "") + (r.allegements && r.allegements.length ? "<br>" + r.allegements.map(esc).join(" · ") : "") + "</div>" : "") +
       (lighter.length ? '<div class="warn info" style="border-left-color:var(--leaf)">🌿 Version allégée : ' + lighter.map(function (l) { return '<a href="#/r/' + l.id + '">' + esc(l.titre) + "</a>"; }).join(", ") + "</div>" : "") +
