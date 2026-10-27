@@ -959,10 +959,10 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     var d = null;
     try { d = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
     d = d || {};
-    return { fm: d.fm == null ? 99 : d.fm, fridge: d.fridge || [], pantry: d.pantry || null, model: d.model || "TM6", saved: d.saved || [], shop: d.shop || [], theme: d.theme || "", style: d.styleChosen && d.style ? d.style : "sauge", styleChosen: !!d.styleChosen, wm: d.wm || "mixte" };
+    return { fm: d.fm == null ? 99 : d.fm, fridge: d.fridge || [], pantry: d.pantry || null, model: d.model || "TM6", saved: d.saved || [], shop: d.shop || [], mt: d.mt || 0, sat: d.sat || 0, theme: d.theme || "", style: d.styleChosen && d.style ? d.style : "sauge", styleChosen: !!d.styleChosen, wm: d.wm || "mixte" };
   }
   var mem = false;
-  function persist() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { mem = true; } }
+  function persist() { S.mt = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { mem = true; } if (typeof syncSoon === "function") syncSoon(); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function toast(t) { var d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(function () { d.remove(); }, 2200); }
   function uid() { return "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -983,6 +983,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     else if (p[0] === "mes") viewSaved();
     else if (p[0] === "communaute") viewComm();
     else if (p[0] === "c" && p[1]) openComm(p[1]);
+    else if (p[0] === "compte") viewAccount();
     else if (p[0] === "courses") viewShop();
     else if (p[0] === "frigo") viewFridge();
     else if (p[0] === "sansrobot") viewFridge(true);
@@ -993,7 +994,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   }
   function shell(inner) {
     document.getElementById("app").innerHTML =
-      '<header class="top"><h1><a href="#/" class="logo" aria-label="Mise en bol, accueil" title="Accueil">Mise en <span>bol</span></a></h1><nav class="nav"><a href="#/mes">Mes recettes' + (S.saved.length ? " (" + S.saved.length + ")" : "") + '</a><a href="#/courses">🛒 Courses' + (S.shop.filter(function (x) { return !x.done; }).length ? ' (' + S.shop.filter(function (x) { return !x.done; }).length + ')' : '') + '</a><a href="#/communaute">Recettes partagées</a><button class="btn" id="theme" aria-label="Changer le thème">' + (isDark() ? "☀︎" : "☾") + '</button><a href="#/reglages">⚙︎</a></nav></header><main>' + inner + "</main>";
+      '<header class="top"><h1><a href="#/" class="logo" aria-label="Mise en bol, accueil" title="Accueil">Mise en <span>bol</span></a></h1><nav class="nav"><a href="#/mes">Mes recettes' + (S.saved.length ? " (" + S.saved.length + ")" : "") + '</a><a href="#/courses">🛒 Courses' + (S.shop.filter(function (x) { return !x.done; }).length ? ' (' + S.shop.filter(function (x) { return !x.done; }).length + ')' : '') + '</a><a href="#/communaute">Recettes partagées</a><button class="btn" id="theme" aria-label="Changer le thème">' + (isDark() ? "☀︎" : "☾") + '</button><a href="#/compte" aria-label="Compte" title="Compte">👤</a><a href="#/reglages">⚙︎</a></nav></header><main>' + inner + "</main>";
     var tb = $("#theme");
     if (tb) tb.onclick = function () { S.theme = isDark() ? "light" : "dark"; persist(); applyTheme(); tb.textContent = isDark() ? "☀︎" : "☾"; };
   }
@@ -1266,13 +1267,14 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     if (shp) shp.onclick = function () {
       var last = 0; try { last = +localStorage.getItem("meb.lastpub") || 0; } catch (e) {}
       if (Date.now() - last < 30000) { toast("Patiente quelques secondes"); return; }
+      if (!loggedIn()) { d.close(); needLogin("publier une recette pour tous"); return; }
       var o = mk();
       shp.disabled = true; shp.textContent = "Publication…";
       var go = function () {
         if (JSON.stringify(o).length > 60000) { shp.disabled = false; shp.textContent = "Publier pour tous"; toast("Recette trop volumineuse"); return; }
         send();
       };
-      var send = function () { sbFetch("shared_recipes", { method: "POST", body: JSON.stringify({ author: o.f.slice(0, 40), comment: o.c.slice(0, 600), payload: o }) }).then(function () {
+      var send = function () { sbFetch("shared_recipes", { method: "POST", body: JSON.stringify({ author: AUTH.pseudo.slice(0, 40), comment: o.c.slice(0, 600), payload: o }) }).then(function () {
         try { localStorage.setItem("meb.lastpub", String(Date.now())); } catch (e) {}
         d.close(); toast("Publié dans Recettes partagées"); commCache = [];
       }).catch(function () { shp.disabled = false; shp.textContent = "Publier pour tous"; toast("Échec de la publication"); }); };
@@ -1296,26 +1298,136 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
       });
     };
   }
+  /* ---------- comptes (Supabase Auth, connexion par email) ---------- */
+  var AK = "meb.auth", AUTH = null;
+  try { AUTH = JSON.parse(localStorage.getItem(AK)); } catch (e) {}
+  function saveAuth(a) { AUTH = a; try { if (a) localStorage.setItem(AK, JSON.stringify(a)); else localStorage.removeItem(AK); } catch (e) {} }
+  function b64j(t) { try { return JSON.parse(decodeURIComponent(escape(atob(String(t).replace(/-/g, "+").replace(/_/g, "/"))))); } catch (e) { return {}; } }
+  function authUrl(p) { return CFG.supabaseUrl.replace(/\/$/, "") + "/auth/v1/" + p; }
+  function setSession(x) {
+    var c = b64j((x.access_token || "").split(".")[1] || "");
+    if (!c.sub) return false;
+    var same = AUTH && AUTH.uid === c.sub;
+    saveAuth({ at: x.access_token, rt: x.refresh_token, exp: +x.expires_at || c.exp || Math.floor(Date.now() / 1000) + (+x.expires_in || 3600), uid: c.sub, email: c.email || (same ? AUTH.email : ""), pseudo: same ? AUTH.pseudo || "" : "" });
+    return true;
+  }
+  function authFetch(path, body) {
+    return fetch(authUrl(path), { method: "POST", headers: { apikey: CFG.anonKey, "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (j) { if (!res.ok) { var e = new Error(j.msg || j.error_description || j.message || "http " + res.status); e.status = res.status; throw e; } return j; });
+    });
+  }
+  function token() {
+    if (!AUTH) return Promise.resolve(CFG.anonKey);
+    if (AUTH.exp - 60 > Date.now() / 1000) return Promise.resolve(AUTH.at);
+    return authFetch("token?grant_type=refresh_token", { refresh_token: AUTH.rt }).then(function (x) { setSession(x); return AUTH ? AUTH.at : CFG.anonKey; }).catch(function (e) {
+      if (e.status === 400 || e.status === 401 || e.status === 403) saveAuth(null);
+      return AUTH ? AUTH.at : CFG.anonKey;
+    });
+  }
+  function eatAuthHash() {
+    var h = location.hash || "";
+    if (h.indexOf("access_token=") === -1 && h.indexOf("error_description=") === -1) return;
+    var q = {}; h.replace(/^#\/?/, "").split("&").forEach(function (kv) { var i = kv.indexOf("="); if (i > 0) { try { q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, " ")); } catch (e) {} } });
+    if (q.access_token) { setSession(q); } else if (q.error_description) { setTimeout(function () { toast("Lien expiré ou déjà utilisé : demande un nouveau code"); }, 400); }
+    try { history.replaceState(null, "", location.pathname + location.search + "#/compte"); } catch (e) {}
+    H = "#/compte";
+  }
   function sbFetch(path, opt) {
     opt = opt || {};
-    var h = { apikey: CFG.anonKey, Authorization: "Bearer " + CFG.anonKey };
-    if (opt.body) { h["Content-Type"] = "application/json"; h.Prefer = "return=minimal"; }
-    return fetch(CFG.supabaseUrl.replace(/\/$/, "") + "/rest/v1/" + path, { method: opt.method || "GET", headers: h, body: opt.body }).then(function (res) {
-      if (!res.ok) throw new Error("http " + res.status);
-      return opt.body ? null : res.json();
+    return token().then(function (tk) {
+      var h = { apikey: CFG.anonKey, Authorization: "Bearer " + tk };
+      if (opt.body) { h["Content-Type"] = "application/json"; h.Prefer = opt.prefer || "return=minimal"; }
+      return fetch(CFG.supabaseUrl.replace(/\/$/, "") + "/rest/v1/" + path, { method: opt.method || "GET", headers: h, body: opt.body }).then(function (res) {
+        if (!res.ok) { var e = new Error("http " + res.status); e.status = res.status; throw e; }
+        return (opt.method || "GET") === "GET" ? res.json() : null;
+      });
     });
+  }
+  var loggedIn = function () { return !!(AUTH && AUTH.pseudo); };
+  function loadProfile(cb) {
+    if (!AUTH) { cb && cb(); return; }
+    sbFetch("profiles?select=pseudo&id=eq." + AUTH.uid).then(function (rows) {
+      if (rows[0] && AUTH) { AUTH.pseudo = rows[0].pseudo; saveAuth(AUTH); }
+      cb && cb();
+    }).catch(function () { cb && cb(); });
+  }
+  /* synchronisation (recettes enregistrées, courses, frigo, réserve, modèle) */
+  var SYNCK = ["saved", "shop", "fridge", "pantry", "model", "fm"], pushT = null;
+  function snap() { var o = { mt: S.mt || 0 }; SYNCK.forEach(function (k) { o[k] = S[k]; }); return o; }
+  function syncPush(cb) {
+    if (!AUTH || !COMM) { cb && cb(false); return; }
+    sbFetch("user_data?on_conflict=user_id", { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: JSON.stringify({ user_id: AUTH.uid, data: snap(), updated_at: new Date().toISOString() }) })
+      .then(function () { S.sat = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} cb && cb(true); }).catch(function () { cb && cb(false); });
+  }
+  function syncSoon() { if (!AUTH || !COMM) return; clearTimeout(pushT); pushT = setTimeout(function () { syncPush(); }, 2500); }
+  function mergeUnion(a, b, key) { var seen = {}, out = []; (a || []).concat(b || []).forEach(function (x) { var k = key(x); if (!seen[k]) { seen[k] = 1; out.push(x); } }); return out; }
+  function syncNow(cb) {
+    if (!AUTH || !COMM) { cb && cb("off"); return; }
+    sbFetch("user_data?select=data&user_id=eq." + AUTH.uid).then(function (rows) {
+      var rd = rows[0] && rows[0].data;
+      if (!rd) { syncPush(function (ok) { cb && cb(ok ? "pushed" : "err"); }); return; }
+      if (!S.sat) {
+        S.saved = mergeUnion(S.saved, rd.saved, function (x) { return x.sid || x.id || JSON.stringify(x).slice(0, 80); });
+        S.shop = mergeUnion(S.shop, rd.shop, function (x) { return x.id + "|" + (x.rs || []).join(","); });
+        S.fridge = mergeUnion(S.fridge, rd.fridge, function (x) { return x; });
+        S.pantry = S.pantry || rd.pantry || null; S.mt = Date.now();
+        syncPush(function (ok) { cb && cb(ok ? "merged" : "err"); });
+      } else if ((rd.mt || 0) > (S.mt || 0)) {
+        SYNCK.forEach(function (k) { if (rd[k] !== undefined) S[k] = rd[k]; });
+        S.mt = rd.mt; S.sat = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+        cb && cb("pulled");
+      } else syncPush(function (ok) { cb && cb(ok ? "pushed" : "err"); });
+    }).catch(function () { cb && cb("err"); });
+  }
+  function needLogin(what) {
+    var d = dlg('<h3>Compte nécessaire</h3><p>Pour ' + what + ', connecte-toi avec ton email (sans mot de passe, ça prend 1 minute).</p><div class="row"><button class="btn pri" id="ok">Me connecter</button><button class="btn" id="x">Plus tard</button></div>');
+    d.querySelector("#x").onclick = function () { d.close(); };
+    d.querySelector("#ok").onclick = function () { d.close(); go("#/compte"); };
+  }
+  function viewAccount() {
+    if (!COMM) { shell('<h2>Compte</h2><div class="empty">Les comptes ne sont pas encore activés sur ce site.</div>'); return; }
+    var lbl = { pushed: "Données envoyées", merged: "Données fusionnées avec celles de ton compte", pulled: "Données récupérées depuis ton compte", err: "Synchronisation impossible pour l'instant", off: "" };
+    if (AUTH && !AUTH.pseudo) {
+      shell('<h2>Choisis ton pseudo</h2><p class="muted">C\'est le nom qui s\'affichera sur tes recettes partagées et tes commentaires.</p><label>Pseudo<br><input class="search" id="ps" maxlength="30" autocomplete="nickname" style="font-size:16px;padding:10px"></label><p id="pse" class="muted" style="color:#b3402a;min-height:1.4em"></p><div class="row"><button class="btn pri" id="psb">Valider</button><button class="btn" id="out">Me déconnecter</button></div>');
+      $("#out").onclick = function () { saveAuth(null); viewAccount(); };
+      $("#psb").onclick = function () {
+        var v = $("#ps").value.trim().replace(/\s+/g, " "); if (v.length < 2) { $("#pse").textContent = "2 caractères minimum"; return; }
+        $("#psb").disabled = true;
+        sbFetch("profiles", { method: "POST", body: JSON.stringify({ id: AUTH.uid, pseudo: v }) }).then(function () { AUTH.pseudo = v; saveAuth(AUTH); syncNow(); toast("Bienvenue " + v); viewAccount(); }).catch(function (e) { $("#psb").disabled = false; $("#pse").textContent = e.status === 409 ? "Ce pseudo est déjà pris" : "Enregistrement impossible, réessaie"; });
+      };
+      return;
+    }
+    if (AUTH) {
+      shell('<h2>Mon compte</h2><div class="twist"><b>👤 ' + esc(AUTH.pseudo) + '</b><p class="muted" style="font-size:13px">' + esc(AUTH.email) + '</p></div><p class="muted">Tes recettes enregistrées, ta liste de courses et ton frigo se synchronisent entre tes appareils. Les photos restent sur l\'appareil où tu les as prises.</p><p id="sst" class="muted" style="font-size:13px"></p><div class="row"><button class="btn" id="ssy">Synchroniser maintenant</button><button class="btn" id="out">Me déconnecter</button></div>');
+      $("#ssy").onclick = function () { $("#sst").textContent = "Synchronisation…"; syncNow(function (r) { $("#sst").textContent = lbl[r] || ""; if (r === "pulled") toast("Données mises à jour"); }); };
+      $("#out").onclick = function () { saveAuth(null); toast("Déconnecté"); viewAccount(); };
+      return;
+    }
+    shell('<h2>Connexion</h2><p class="muted">Pas de mot de passe : tu reçois un code par email. Connecté, tu peux publier des recettes, commenter, et retrouver tes données sur tous tes appareils.</p><div id="lg1"><label>Ton email<br><input class="search" id="em" type="email" autocomplete="email" inputmode="email" style="font-size:16px;padding:10px"></label><p id="lge" style="color:#b3402a;min-height:1.4em;margin:6px 0"></p><div class="row"><button class="btn pri" id="lgs">Recevoir mon code</button></div></div><div id="lg2" hidden><p>Un email vient de partir. Tape le code à chiffres reçu, ou clique simplement sur le lien dans l\'email.</p><label>Code<br><input class="search" id="cd" inputmode="numeric" autocomplete="one-time-code" maxlength="10" style="font-size:20px;padding:10px;letter-spacing:4px"></label><div class="row" style="margin-top:8px"><button class="btn pri" id="lgv">Valider</button><button class="btn" id="lgb">Changer d\'email</button></div></div>');
+    $("#lgs").onclick = function () {
+      var em = $("#em").value.trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { $("#lge").textContent = "Email invalide"; return; }
+      $("#lgs").disabled = true; $("#lge").textContent = "";
+      authFetch("otp?redirect_to=" + encodeURIComponent(location.origin + location.pathname), { email: em, create_user: true }).then(function () { $("#lg1").hidden = true; $("#lg2").hidden = false; $("#cd").focus(); }).catch(function (e) { $("#lgs").disabled = false; $("#lge").textContent = e.status === 429 ? "Trop de demandes, patiente une minute" : "Envoi impossible : " + (e.message || "réessaie"); });
+    };
+    $("#lgb").onclick = function () { $("#lg2").hidden = true; $("#lg1").hidden = false; $("#lgs").disabled = false; };
+    $("#lgv").onclick = function () {
+      var em = $("#em").value.trim().toLowerCase(), t = $("#cd").value.replace(/\s/g, ""); if (!t) return;
+      $("#lgv").disabled = true;
+      authFetch("verify", { type: "email", email: em, token: t }).then(function (x) { if (!setSession(x)) throw new Error("bad"); loadProfile(function () { syncNow(); viewAccount(); }); }).catch(function () { $("#lgv").disabled = false; toast("Code incorrect ou expiré"); });
+    };
   }
   var commCache = [];
   function viewComm() {
     if (!COMM) { shell('<h2>Recettes partagées</h2><div class="empty">Le partage entre tout le monde n\'est pas encore activé sur ce site.<br>En attendant, tu peux envoyer une recette par lien depuis sa page (bouton Partager).</div>'); return; }
     shell('<h2>Recettes partagées</h2><p class="muted">Les recettes que les gens ont choisi de partager avec tout le monde, avec leur commentaire.</p><div id="cl"><p class="muted">Chargement…</p></div>');
-    sbFetch("shared_recipes?select=id,created_at,author,comment,payload&order=created_at.desc&limit=100").then(function (rows) {
+    sbFetch("shared_recipes?select=id,user_id,created_at,author,comment,payload&order=created_at.desc&limit=100").then(function (rows) {
       commCache = rows;
       $("#cl").innerHTML = rows.length ? '<div class="grid">' + rows.map(function (x) {
         var r = x.payload && (x.payload.r || E.getRecipe(x.payload.id));
         if (!r || !r.titre) return "";
-        return '<div class="card" data-rid="' + esc(x.id) + '"><a href="#/c/' + esc(x.id) + '" style="text-decoration:none;color:inherit"><div class="cthumb">' + (okPh(x.payload.ph) ? '<img src="' + x.payload.ph + '" alt="">' : art(r).replace("<svg ", '<svg preserveAspectRatio="xMidYMid slice" ')) + '</div><h3>' + esc(r.titre) + "</h3><p>" + (x.author ? "par " + esc(x.author) + " · " : "") + new Date(x.created_at).toLocaleDateString("fr-FR") + "</p>" + (x.comment ? '<p class="muted" style="font-size:13px">« ' + esc(String(x.comment).slice(0, 140)) + " »</p>" : "") + '</a><div class="cprev"></div></div>';
+        return '<div class="card" data-rid="' + esc(x.id) + '"><a href="#/c/' + esc(x.id) + '" style="text-decoration:none;color:inherit"><div class="cthumb">' + (okPh(x.payload.ph) ? '<img src="' + x.payload.ph + '" alt="">' : art(r).replace("<svg ", '<svg preserveAspectRatio="xMidYMid slice" ')) + '</div><h3>' + esc(r.titre) + "</h3><p>" + (x.author ? "par " + esc(x.author) + " · " : "") + new Date(x.created_at).toLocaleDateString("fr-FR") + "</p>" + (x.comment ? '<p class="muted" style="font-size:13px">« ' + esc(String(x.comment).slice(0, 140)) + " »</p>" : "") + '</a><div class="cprev"></div>' + (AUTH && x.user_id && x.user_id === AUTH.uid ? '<button class="btn" data-del="' + esc(x.id) + '" style="margin-top:8px;font-size:13px">Supprimer ma recette</button>' : "") + "</div>";
       }).join("") + "</div>" : '<div class="empty">Aucune recette partagée pour l\'instant.<br>Sois le premier : ouvre une recette puis « Partager ».</div>';
+      document.querySelectorAll("[data-del]").forEach(function (b) { b.onclick = function () { var d = dlg('<h3>Retirer ta recette des partages ?</h3><p class="muted">Les commentaires associés disparaissent aussi.</p><div class="row"><button class="btn pri" id="ok">Supprimer</button><button class="btn" id="x">Annuler</button></div>'); d.querySelector("#x").onclick = function () { d.close(); }; d.querySelector("#ok").onclick = function () { d.close(); sbFetch("shared_recipes?id=eq." + encodeURIComponent(b.dataset.del), { method: "DELETE" }).then(function () { toast("Recette retirée"); commCache = []; viewComm(); }).catch(function () { toast("Suppression impossible"); }); }; }; });
       if (!rows.length) return;
       sbFetch("recipe_comments?select=recipe_id,author,body,created_at&recipe_id=in.(" + rows.map(function (x) { return x.id; }).join(",") + ")&order=created_at.desc&limit=500").then(function (cs) {
         var by = {}; cs.forEach(function (c) { (by[c.recipe_id] = by[c.recipe_id] || []).push(c); });
@@ -1338,18 +1450,22 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   }
   function initComments(id) {
     var list = function () {
-      sbFetch("recipe_comments?select=created_at,author,body&recipe_id=eq." + encodeURIComponent(id) + "&order=created_at.asc&limit=200").then(function (rows) {
+      sbFetch("recipe_comments?select=id,user_id,created_at,author,body&recipe_id=eq." + encodeURIComponent(id) + "&order=created_at.asc&limit=200").then(function (rows) {
         var el = $("#cml"); if (!el) return;
-        el.innerHTML = rows.length ? rows.map(function (c) { return '<p style="margin:8px 0"><b>' + esc(c.author || "Quelqu'un") + '</b> <span class="muted" style="font-size:12px">' + new Date(c.created_at).toLocaleDateString("fr-FR") + "</span><br>" + esc(c.body).replace(/\n/g, "<br>") + "</p>"; }).join("") : '<p class="muted" style="font-size:13px">Pas encore de commentaire.</p>';
+        el.innerHTML = rows.length ? rows.map(function (c) {
+          var mine = AUTH && c.user_id && c.user_id === AUTH.uid;
+          return '<p style="margin:8px 0"><b>' + esc(c.author || "Quelqu'un") + '</b> <span class="muted" style="font-size:12px">' + new Date(c.created_at).toLocaleDateString("fr-FR") + "</span>" + (mine ? ' <a href="#" data-ce="' + esc(c.id) + '" style="font-size:12px">modifier</a> <a href="#" data-cd="' + esc(c.id) + '" style="font-size:12px">supprimer</a>' : "") + '<br><span id="cb-' + esc(c.id) + '">' + esc(c.body).replace(/\n/g, "<br>") + "</span></p>";
+        }).join("") : '<p class="muted" style="font-size:13px">Pas encore de commentaire. Sois le premier !</p>';
+        var byId = {}; rows.forEach(function (c) { byId[c.id] = c; });
+        el.querySelectorAll("[data-cd]").forEach(function (a) { a.onclick = function (ev) { ev.preventDefault(); var d = dlg('<h3>Supprimer ce commentaire ?</h3><div class="row"><button class="btn pri" id="ok">Supprimer</button><button class="btn" id="x">Annuler</button></div>'); d.querySelector("#x").onclick = function () { d.close(); }; d.querySelector("#ok").onclick = function () { d.close(); sbFetch("recipe_comments?id=eq." + encodeURIComponent(a.dataset.cd), { method: "DELETE" }).then(function () { toast("Commentaire supprimé"); list(); }).catch(function () { toast("Suppression impossible"); }); }; }; });
+        el.querySelectorAll("[data-ce]").forEach(function (a) { a.onclick = function (ev) { ev.preventDefault(); var c = byId[a.dataset.ce]; var d = dlg('<h3>Modifier mon commentaire</h3><textarea id="ect" maxlength="600"></textarea><div class="row"><button class="btn pri" id="ok">Enregistrer</button><button class="btn" id="x">Annuler</button></div>'); d.querySelector("#ect").value = c.body; d.querySelector("#x").onclick = function () { d.close(); }; d.querySelector("#ok").onclick = function () { var t = d.querySelector("#ect").value.trim(); if (!t) return; d.close(); sbFetch("recipe_comments?id=eq." + encodeURIComponent(c.id), { method: "PATCH", body: JSON.stringify({ body: t.slice(0, 600) }) }).then(function () { toast("Commentaire modifié"); list(); }).catch(function () { toast("Modification impossible"); }); }; }; });
       }).catch(function () { var el = $("#cml"); if (el) el.innerHTML = '<p class="muted" style="font-size:13px">Commentaires indisponibles pour l\'instant.</p>'; });
     };
-    var nm = ""; try { nm = localStorage.getItem("meb.name") || ""; } catch (e) {}
-    $("#cmf").value = nm;
-    $("#cmb").onclick = function () {
-      var t = $("#cmt").value.trim(), f = $("#cmf").value.trim(); if (!t) { toast("Écris un commentaire"); return; }
+    if ($("#cmb")) $("#cmb").onclick = function () {
+      var t = $("#cmt").value.trim(); if (!t) { toast("Écris un commentaire"); return; }
+      if (!loggedIn()) { needLogin("commenter"); return; }
       var btn = $("#cmb"); btn.disabled = true;
-      sbFetch("recipe_comments", { method: "POST", body: JSON.stringify({ recipe_id: id, author: f.slice(0, 40), body: t.slice(0, 600) }) }).then(function () {
-        try { localStorage.setItem("meb.name", f); } catch (e) {}
+      sbFetch("recipe_comments", { method: "POST", body: JSON.stringify({ recipe_id: id, author: AUTH.pseudo.slice(0, 40), body: t.slice(0, 600) }) }).then(function () {
         $("#cmt").value = ""; btn.disabled = false; toast("Commentaire ajouté"); list();
       }).catch(function () { btn.disabled = false; toast("Échec de l'envoi"); });
     };
@@ -1402,7 +1518,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
     if (cur.portions < base.portions_min || cur.portions > base.portions_max) h += '<div class="warn info">Cette recette est prévue pour ' + base.portions_min + " à " + base.portions_max + " portions : au-delà, les résultats sont moins sûrs.</div>";
     sc.warnings.forEach(function (w) { h += '<div class="warn ' + w.level + '">' + (w.level === "stop" ? "⛔ " : "ℹ️ ") + esc(w.text) + "</div>"; });
     if (cur.shared) h += '<div class="twist"><b>💬 Recette partagée' + (cur.shared.f ? " par " + esc(cur.shared.f) : "") + "</b>" + (cur.shared.c ? "<p>" + esc(cur.shared.c).replace(/\n/g, "<br>") + "</p>" : "") + '<p class="muted" style="font-size:13px">Touche « Enregistrer » pour la garder dans tes recettes.</p></div>';
-    if (cur.shared && cur.commId && COMM) h += '<div id="cmts" class="twist"><b>💬 Commentaires</b><div id="cml"><p class="muted" style="font-size:13px">Chargement…</p></div><label style="display:block;margin-top:10px">Ton prénom (facultatif)<br><input class="search" id="cmf" style="font-size:16px;padding:10px" maxlength="40"></label><label style="display:block;margin-top:8px">Ton commentaire<br><textarea id="cmt" maxlength="600" placeholder="Ex. : fait hier, j\'ai ajouté un peu de citron, délicieux !"></textarea></label><div class="row"><button class="btn pri" id="cmb">Ajouter mon commentaire</button></div></div>';
+    if (cur.shared && cur.commId && COMM) h += '<div id="cmts" class="twist"><b>💬 Commentaires</b><div id="cml"><p class="muted" style="font-size:13px">Chargement…</p></div>' + (loggedIn() ? '<label style="display:block;margin-top:8px">Ton commentaire (en tant que ' + esc(AUTH.pseudo) + ')<br><textarea id="cmt" maxlength="600" placeholder="Ex. : fait hier, j\'ai ajouté un peu de citron, délicieux !"></textarea></label><div class="row"><button class="btn pri" id="cmb">Ajouter mon commentaire</button></div>' : '<p style="margin:10px 0 0"><a href="#/compte">Connecte-toi</a> pour écrire un commentaire.</p>') + '</div>';
     if (r.verifier) h += '<div class="warn info">🧪 Recette non testée sur une vraie machine : vérifie les temps et la texture au premier essai.</div>';
     if (r.modifs && r.modifs.length) h += '<div class="modifs"><b>Modifications :</b><ul>' + r.modifs.map(function (m) { return "<li>" + esc(m) + "</li>"; }).join("") + "</ul></div>";
 
@@ -1718,7 +1834,9 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   });
   window.addEventListener("hashchange", function () { if (location.hash !== H) { H = location.hash; route(); } });
   window.MEB = { route: route, state: function () { return { S: S, cur: cur, cook: cook }; } };
+  eatAuthHash();
   route();
+  if (AUTH) loadProfile(function () { syncNow(function (r) { if (r === 'pulled') route(); }); });
   phLoad(function () { if (Object.keys(PH).length) route(); });
   if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) navigator.serviceWorker.register("sw.js").catch(function () {});
 })();
