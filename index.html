@@ -976,6 +976,15 @@ if (typeof module !== "undefined" && module.exports) module.exports = Engine;
   function go(h) { H = h; try { location.hash = h; } catch (e) {} route(); }
   document.addEventListener("click", function (e) {
     var a = e.target.closest && e.target.closest("a[href^='#/']");
+    if (a && a.closest("header.top") && e.detail > 0 && (e.clientX || e.clientY)) {
+      var rc = a.getBoundingClientRect();
+      if (e.clientX < rc.left - 6 || e.clientX > rc.right + 6 || e.clientY < rc.top - 6 || e.clientY > rc.bottom + 6) {
+        e.preventDefault(); e.stopPropagation();
+        var under = document.elementFromPoint(e.clientX, e.clientY);
+        if (under && !a.contains(under) && under.click) under.click();
+        return;
+      }
+    }
     if (a) { e.preventDefault(); if (a.closest("h1")) { clearFilters(); tirage = 0; } go(a.getAttribute("href")); }
   });
   function route() {
